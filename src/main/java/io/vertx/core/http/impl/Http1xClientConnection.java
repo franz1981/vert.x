@@ -33,6 +33,7 @@ import io.vertx.core.http.HttpVersion;
 import io.vertx.core.http.impl.pool.ConnectionListener;
 import io.vertx.core.http.impl.ws.WebSocketFrameInternal;
 import io.vertx.core.impl.ContextInternal;
+import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.core.net.NetSocket;
@@ -672,7 +673,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
   }
 
   synchronized void toWebSocket(String requestURI, MultiMap headers, WebsocketVersion vers, String subProtocols,
-                   int maxWebSocketFrameSize, Handler<WebSocket> wsConnect) {
+                   int maxWebSocketFrameSize, Handler<AsyncResult<WebSocket>> wsConnect) {
     if (ws != null) {
       throw new IllegalStateException("Already websocket");
     }
@@ -706,7 +707,24 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
       handshaker = WebSocketClientHandshakerFactory.newHandshaker(wsuri, version, subProtocols, !extensionHandshakers.isEmpty(),
                                                                   nettyHeaders, maxWebSocketFrameSize,!options.isSendUnmaskedFrames(),false);
 
-      p.addBefore("handler", "handshakeCompleter", new HandshakeInboundHandler(wsConnect, version != WebSocketVersion.V00));
+      boolean supportsContinuation = version != WebSocketVersion.V00;
+      p.addBefore("handler", "handshakeCompleter", new HandshakeInboundHandler(vertx.getContext(), handshaker, ar -> {
+        if (ar.succeeded()) {
+          WebSocketImpl webSocket = new WebSocketImpl(vertx, Http1xClientConnection.this, supportsContinuation,
+            options.getMaxWebsocketFrameSize(),
+            options.getMaxWebsocketMessageSize());
+          ws = webSocket;
+          ws.subProtocol(handshaker.actualSubprotocol());
+          log.debug("WebSocket handshake complete");
+          if (metrics != null ) {
+            webSocket.setMetric(metrics.connected(endpointMetric, metric(), webSocket));
+          }
+          webSocket.registerHandler(vertx.eventBus());
+          wsConnect.handle(Future.succeededFuture(webSocket));
+        } else {
+          wsConnect.handle(Future.failedFuture(ar.cause()));
+        }
+      }));
       handshaker.handshake(chctx.channel()).addListener(future -> {
         Handler<Throwable> handler = exceptionHandler();
         if (!future.isSuccess() && handler != null) {
@@ -734,19 +752,19 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
     return extensionHandshakers;
   }
 
-  private final class HandshakeInboundHandler extends ChannelInboundHandlerAdapter {
+  private static final class HandshakeInboundHandler extends ChannelInboundHandlerAdapter {
 
-    private final boolean supportsContinuation;
-    private final Handler<WebSocket> wsConnect;
+    private final Future<Void> wsConnect;
     private final ContextInternal context;
     private final Deque<Object> buffered = new ArrayDeque<>();
     private FullHttpResponse response;
     private boolean handshaking = true;
+    private WebSocketClientHandshaker handshaker;
 
-    public HandshakeInboundHandler(Handler<WebSocket> wsConnect, boolean supportsContinuation) {
-      this.supportsContinuation = supportsContinuation;
-      this.wsConnect = wsConnect;
-      this.context = vertx.getContext();
+    public HandshakeInboundHandler(ContextInternal context, WebSocketClientHandshaker handshaker, Handler<AsyncResult<Void>> wsConnect) {
+      this.wsConnect = Future.<Void>future().setHandler(wsConnect);
+      this.handshaker = handshaker;
+      this.context = context;
     }
 
     @Override
@@ -767,8 +785,8 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
           HttpResponseStatus status = resp.status();
           if (status.code() != 101) {
             handshaker = null;
-            close();
             handleException(new WebsocketRejectedException(status.code()));
+            ctx.close();
             return;
           }
           response = new DefaultFullHttpResponse(resp.protocolVersion(), status);
@@ -782,7 +800,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
               response.trailingHeaders().add(((LastHttpContent) msg).trailingHeaders());
               try {
                 handshakeComplete(ctx, response);
-                chctx.pipeline().remove(HandshakeInboundHandler.this);
+                ctx.pipeline().remove(HandshakeInboundHandler.this);
                 for (;;) {
                   Object m = buffered.poll();
                   if (m == null) {
@@ -791,7 +809,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
                   ctx.fireChannelRead(m);
                 }
               } catch (WebSocketHandshakeException e) {
-                close();
+                ctx.close();
                 handleException(e);
               }
             }
@@ -805,14 +823,9 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
     private void handleException(Exception e) {
       handshaking = false;
       buffered.clear();
-      Handler<Throwable> handler = exceptionHandler();
-      if (handler != null) {
-        context.executeFromIO(v -> {
-          handler.handle(e);
-        });
-      } else {
-        log.error("Error in websocket handshake", e);
-      }
+      context.executeFromIO(v -> {
+        wsConnect.tryFail(e);
+      });
     }
 
     private void handshakeComplete(ChannelHandlerContext ctx, FullHttpResponse response) {
@@ -822,20 +835,8 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
         // remove decompressor as its not needed anymore once connection was upgraded to websockets
         ctx.pipeline().remove(handler);
       }
-      WebSocketImpl webSocket = new WebSocketImpl(vertx, Http1xClientConnection.this, supportsContinuation,
-                                                  options.getMaxWebsocketFrameSize(),
-                                                  options.getMaxWebsocketMessageSize());
-      ws = webSocket;
-      handshaker.finishHandshake(chctx.channel(), response);
-      ws.subProtocol(handshaker.actualSubprotocol());
-      context.executeFromIO(v -> {
-        log.debug("WebSocket handshake complete");
-        if (metrics != null ) {
-          webSocket.setMetric(metrics.connected(endpointMetric, metric(), webSocket));
-        }
-        webSocket.registerHandler(vertx.eventBus());
-        wsConnect.handle(webSocket);
-      });
+      handshaker.finishHandshake(ctx.channel(), response);
+      wsConnect.tryComplete(null);
     }
   }
 

@@ -751,8 +751,12 @@ public class HTTPExamples {
   }
 
   public void example54(HttpClient client) {
-    client.websocket("/some-uri", websocket -> {
-      System.out.println("Connected!");
+    client.websocket("/some-uri", res -> {
+      if (res.succeeded()) {
+        System.out.println("Connected!");
+      } else {
+        System.out.println("Connect error " + res.cause());
+      }
     });
   }
 

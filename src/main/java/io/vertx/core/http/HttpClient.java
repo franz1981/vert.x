@@ -19,7 +19,6 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.metrics.Measured;
-import io.vertx.core.streams.ReadStream;
 
 import java.util.function.Function;
 
@@ -802,7 +801,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(RequestOptions options, Handler<WebSocket> wsConnect);
+  HttpClient websocket(RequestOptions options, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket to the specified port, host and relative request URI
@@ -813,29 +812,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(int port, String host, String requestURI, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket with the specified options
-   * @param options  the request options
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(RequestOptions options, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket to the specified port, host and relative request URI
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(int port, String host, String requestURI, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
+  HttpClient websocket(int port, String host, String requestURI, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket to the host and relative request URI and default port
@@ -845,18 +822,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(String host, String requestURI, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket to the host and relative request URI and default port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String host, String requestURI, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
+  HttpClient websocket(String host, String requestURI, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket with the specified options, and with the specified headers
@@ -866,7 +832,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(RequestOptions options, MultiMap headers, Handler<WebSocket> wsConnect);
+  HttpClient websocket(RequestOptions options, MultiMap headers, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket to the specified port, host and relative request URI, and with the specified headers
@@ -878,31 +844,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(int port, String host, String requestURI, MultiMap headers, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket with the specified options, and with the specified headers
-   * @param options  the request options
-   * @param headers  the headers
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(RequestOptions options, MultiMap headers, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket to the specified port, host and relative request URI, and with the specified headers
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(int port, String host, String requestURI, MultiMap headers, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
+  HttpClient websocket(int port, String host, String requestURI, MultiMap headers, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket to the specified host,relative request UR, and default port and with the specified headers
@@ -913,19 +855,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(String host, String requestURI, MultiMap headers, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket to the specified host,relative request UR, and default port and with the specified headers
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String host, String requestURI, MultiMap headers, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
+  HttpClient websocket(String host, String requestURI, MultiMap headers, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket with the specified optionsI, with the specified headers and using
@@ -937,8 +867,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(RequestOptions options, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect);
+  HttpClient websocket(RequestOptions options, MultiMap headers, WebsocketVersion version, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket to the specified port, host and relative request URI, with the specified headers and using
@@ -952,38 +881,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(int port, String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket with the specified options, with the specified headers and using
-   * the specified version of WebSockets
-   * @param options  the request options
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(RequestOptions options, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket to the specified port, host and relative request URI, with the specified headers and using
-   * the specified version of WebSockets
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(int port, String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
+  HttpClient websocket(int port, String host, String requestURI, MultiMap headers, WebsocketVersion version, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket to the specified host, relative request URI and default port with the specified headers and using
@@ -996,23 +894,7 @@ public interface HttpClient extends Measured {
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocket(String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket to the specified host, relative request URI and default port with the specified headers and using
-   * the specified version of WebSockets
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
+  HttpClient websocket(String host, String requestURI, MultiMap headers, WebsocketVersion version, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket with the specified options, with the specified headers, using
@@ -1026,7 +908,7 @@ public interface HttpClient extends Measured {
    */
   @Fluent
   HttpClient websocket(RequestOptions options, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect);
+                       String subProtocols, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Connect a WebSocket to the specified port, host and relative request URI, with the specified headers, using
@@ -1042,9 +924,70 @@ public interface HttpClient extends Measured {
    */
   @Fluent
   HttpClient websocket(int port, String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect);
+                       String subProtocols, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
+   * Connect a WebSocket to the specified host, relative request URI and default port, with the specified headers, using
+   * the specified version of WebSockets, and the specified websocket sub protocols
+   * @param host  the host
+   * @param requestURI  the relative URI
+   * @param headers  the headers
+   * @param version  the websocket version
+   * @param subProtocols  the subprotocols to use
+   * @param wsConnect  handler that will be called with the websocket when connected
+   * @return a reference to this, so the API can be used fluently
+   */
+  @Fluent
+  HttpClient websocket(String host, String requestURI, MultiMap headers, WebsocketVersion version,
+                       String subProtocols, Handler<AsyncResult<WebSocket>> wsConnect);
+
+  /**
+   * Connect a WebSocket at the relative request URI using the default host and port
+   * @param requestURI  the relative URI
+   * @param wsConnect  handler that will be called with the websocket when connected
+   * @return a reference to this, so the API can be used fluently
+   */
+  @Fluent
+  HttpClient websocket(String requestURI, Handler<AsyncResult<WebSocket>> wsConnect);
+
+  /**
+   * Connect a WebSocket at the relative request URI using the default host and port and the specified headers
+   * @param requestURI  the relative URI
+   * @param headers  the headers
+   * @param wsConnect  handler that will be called with the websocket when connected
+   * @return a reference to this, so the API can be used fluently
+   */
+  @Fluent
+  HttpClient websocket(String requestURI, MultiMap headers, Handler<AsyncResult<WebSocket>> wsConnect);
+
+  /**
+   * Connect a WebSocket at the relative request URI using the default host and port, the specified headers and the
+   * specified version of WebSockets
+   * @param requestURI  the relative URI
+   * @param headers  the headers
+   * @param version  the websocket version
+   * @param wsConnect  handler that will be called with the websocket when connected
+   * @return a reference to this, so the API can be used fluently
+   */
+  @Fluent
+  HttpClient websocket(String requestURI, MultiMap headers, WebsocketVersion version, Handler<AsyncResult<WebSocket>> wsConnect);
+
+
+  /**
+   * Connect a WebSocket at the relative request URI using the default host and port, the specified headers, the
+   * specified version of WebSockets and the specified sub protocols
+   * @param requestURI  the relative URI
+   * @param headers  the headers
+   * @param version  the websocket version
+   * @param subProtocols  the subprotocols
+   * @param wsConnect  handler that will be called with the websocket when connected
+   * @return a reference to this, so the API can be used fluently
+   */
+  @Fluent
+  HttpClient websocket(String requestURI, MultiMap headers, WebsocketVersion version,
+                       String subProtocols, Handler<AsyncResult<WebSocket>> wsConnect);
+
+ /**
    * Connect a WebSocket with the specified absolute url, with the specified headers, using
    * the specified version of WebSockets, and the specified websocket sub protocols.
    *
@@ -1053,344 +996,10 @@ public interface HttpClient extends Measured {
    * @param version        the websocket version
    * @param subProtocols   the subprotocols to use
    * @param wsConnect      handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
    * @return a reference to this, so the API can be used fluently
    */
   @Fluent
-  HttpClient websocketAbs(String url, MultiMap headers, WebsocketVersion version, String subProtocols, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket with the specified options, with the specified headers, using
-   * the specified version of WebSockets, and the specified websocket sub protocols
-   * @param options  the request options
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols to use
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(RequestOptions options, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket to the specified port, host and relative request URI, with the specified headers, using
-   * the specified version of WebSockets, and the specified websocket sub protocols
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols to use
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(int port, String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket to the specified host, relative request URI and default port, with the specified headers, using
-   * the specified version of WebSockets, and the specified websocket sub protocols
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols to use
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket to the specified host, relative request URI and default port, with the specified headers, using
-   * the specified version of WebSockets, and the specified websocket sub protocols
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols to use
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port
-   * @param requestURI  the relative URI
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port
-   * @param requestURI  the relative URI
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port and the specified headers
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, MultiMap headers, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port and the specified headers
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, MultiMap headers, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port, the specified headers and the
-   * specified version of WebSockets
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port, the specified headers and the
-   * specified version of WebSockets
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, MultiMap headers, WebsocketVersion version,
-                       Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port, the specified headers, the
-   * specified version of WebSockets and the specified sub protocols
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect);
-
-  /**
-   * Connect a WebSocket at the relative request URI using the default host and port, the specified headers, the
-   * specified version of WebSockets and the specified sub protocols
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols
-   * @param wsConnect  handler that will be called with the websocket when connected
-   * @param failureHandler handler that will be called if websocket connection fails
-   * @return a reference to this, so the API can be used fluently
-   */
-  @Fluent
-  HttpClient websocket(String requestURI, MultiMap headers, WebsocketVersion version,
-                       String subProtocols, Handler<WebSocket> wsConnect, Handler<Throwable> failureHandler);
-
-
-  /**
-   * Create a WebSocket stream with the specified options
-   * @param options  the request options
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(RequestOptions options);
-
-  /**
-   * Create a WebSocket stream to the specified port, host and relative request URI
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(int port, String host, String requestURI);
-
-  /**
-   * Create a WebSocket stream to the specified host, relative request URI and default port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String host, String requestURI);
-
-  /**
-   * Create a WebSocket stream with the specified options, and with the specified headers
-   * @param options  the request options
-   * @param headers  the headers
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(RequestOptions options, MultiMap headers);
-
-  /**
-   * Create a WebSocket stream to the specified port, host and relative request URI, and with the specified headers
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(int port, String host, String requestURI, MultiMap headers);
-
-  /**
-   * Create a WebSocket stream to the specified host, relative request URI and default port and with the specified headers
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String host, String requestURI, MultiMap headers);
-
-  /**
-   * Create a WebSocket stream with the specified options, with the specified headers and using
-   * the specified version of WebSockets
-   * @param options  the request options
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(RequestOptions options, MultiMap headers, WebsocketVersion version);
-
-  /**
-   * Create a WebSocket stream to the specified port, host and relative request URI, with the specified headers and using
-   * the specified version of WebSockets
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(int port, String host, String requestURI, MultiMap headers, WebsocketVersion version);
-
-  /**
-   * Create a WebSocket stream with the specified options and with the specified headers and using
-   * the specified version of WebSockets
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String host, String requestURI, MultiMap headers, WebsocketVersion version);
-
-  /**
-   * Create a WebSocket stream with the specified absolute url, the specified headers, using the specified version of WebSockets,
-   * and the specified websocket sub protocols.
-   *
-   * @param url          the absolute url
-   * @param headers      the headers
-   * @param version      the websocket version
-   * @param subProtocols the subprotocols to use
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStreamAbs(String url, MultiMap headers, WebsocketVersion version, String subProtocols);
-
-  /**
-   * Create a WebSocket stream to the specified port, host and relative request URI, with the specified headers, using
-   * the specified version of WebSockets, and the specified websocket sub protocols
-   * @param options  the request options
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols to use
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(RequestOptions options, MultiMap headers, WebsocketVersion version,
-                                  String subProtocols);
-
-  /**
-   * Create a WebSocket stream to the specified port, host and relative request URI, with the specified headers, using
-   * the specified version of WebSockets, and the specified websocket sub protocols
-   * @param port  the port
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols to use
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(int port, String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                                  String subProtocols);
-
-  /**
-   * Create a WebSocket stream to the specified host, relative request URI and default port, with the specified headers, using
-   * the specified version of WebSockets, and the specified websocket sub protocols
-   * @param host  the host
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols to use
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String host, String requestURI, MultiMap headers, WebsocketVersion version,
-                                  String subProtocols);
-
-  /**
-   * Create a WebSocket stream at the relative request URI using the default host and port and the specified headers
-   * @param requestURI  the relative URI
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String requestURI);
-
-  /**
-   * Create a WebSocket stream at the relative request URI using the default host and port and the specified headers
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String requestURI, MultiMap headers);
-
-  /**
-   * Create a WebSocket stream at the relative request URI using the default host and port, the specified headers and the
-   * specified version of WebSockets
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String requestURI, MultiMap headers, WebsocketVersion version);
-
-  /**
-   * Create a WebSocket stream at the relative request URI using the default host and port, the specified headers, the
-   * specified version of WebSockets and the specified sub protocols
-   * @param requestURI  the relative URI
-   * @param headers  the headers
-   * @param version  the websocket version
-   * @param subProtocols  the subprotocols
-   * @return a stream emitting a WebSocket event when the client connection has been upgraded to a websocket
-   */
-  ReadStream<WebSocket> websocketStream(String requestURI, MultiMap headers, WebsocketVersion version,
-                                  String subProtocols);
+  HttpClient websocketAbs(String url, MultiMap headers, WebsocketVersion version, String subProtocols, Handler<AsyncResult<WebSocket>> wsConnect);
 
   /**
    * Set a connection handler for the client. This handler is called when a new connection is established.

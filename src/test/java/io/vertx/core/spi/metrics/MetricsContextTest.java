@@ -280,7 +280,7 @@ public class MetricsContextTest extends VertxTestBase {
     });
     awaitLatch(latch);
     HttpClient client = vertx.createHttpClient();
-    client.websocket(8080, "localhost", "/", ws -> {
+    client.websocket(8080, "localhost", "/", onSuccess(ws -> {
       ws.handler(buf -> {
         ws.closeHandler(v -> {
           vertx.close(v4 -> {
@@ -297,7 +297,7 @@ public class MetricsContextTest extends VertxTestBase {
         ws.close();
       });
       ws.write(Buffer.buffer("hello"));
-    });
+    }));
     await();
   }
 
@@ -494,7 +494,7 @@ public class MetricsContextTest extends VertxTestBase {
       expectedContext.set(Vertx.currentContext());
       HttpClient client = vertx.createHttpClient();
       checker.accept(expectedThread.get(), expectedContext.get());
-      client.websocket(8080, "localhost", "/", ws -> {
+      client.websocket(8080, "localhost", "/", onSuccess(ws -> {
         ws.handler(buf -> {
           ws.closeHandler(v2 -> {
             executeInVanillaThread(() -> {
@@ -514,7 +514,7 @@ public class MetricsContextTest extends VertxTestBase {
           ws.close();
         });
         ws.write(Buffer.buffer("hello"));
-      });
+      }));
     });
     await();
   }
