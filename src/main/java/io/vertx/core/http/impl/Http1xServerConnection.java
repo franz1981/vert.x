@@ -127,7 +127,11 @@ public class Http1xServerConnection extends Http1xConnectionBase implements Http
       requestInProgress = req;
       if (responseInProgress == null) {
         responseInProgress = requestInProgress;
-        req.handleBegin();
+        if (METRICS_ENABLED) {
+          req.handleBeginMetrics();
+        } else {
+          req.handleBegin();
+        }
       } else {
         // Deferred until the current response completion
         req.pause();
@@ -326,7 +330,7 @@ public class Http1xServerConnection extends Http1xConnectionBase implements Http
       ws.registerHandler(vertx.eventBus());
       return handshaker.selectedSubprotocol();
     };
-    ws = new ServerWebSocketImpl(vertx, request.uri(), request.path(),
+    ws = new ServerWebSocketImpl(vertx, vertx.getOrCreateContext(), request.uri(), request.path(),
       request.query(), request.headers(), this, handshaker.version() != WebSocketVersion.V00,
       f, options.getMaxWebsocketFrameSize(), options.getMaxWebsocketMessageSize());
     if (METRICS_ENABLED && metrics != null) {

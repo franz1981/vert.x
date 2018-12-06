@@ -195,6 +195,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
 
     private final int id;
     private final Http1xClientConnection conn;
+    private final ContextInternal context;
     private final Future<HttpClientStream> fut;
     private HttpClientRequestImpl request;
     private HttpClientResponseImpl response;
@@ -205,7 +206,8 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
     private MultiMap trailers;
     private StreamImpl next;
 
-    StreamImpl(Http1xClientConnection conn, int id, Handler<AsyncResult<HttpClientStream>> handler) {
+    StreamImpl(ContextInternal context, Http1xClientConnection conn, int id, Handler<AsyncResult<HttpClientStream>> handler) {
+      this.context = context;
       this.conn = conn;
       this.fut = Future.<HttpClientStream>future().setHandler(handler);
       this.id = id;
@@ -247,7 +249,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
 
     @Override
     public ContextInternal getContext() {
-      return conn.context;
+      return context;
     }
 
     public void writeHead(HttpMethod method, String rawMethod, String uri, MultiMap headers, String hostHeader, boolean chunked, ByteBuf buf, boolean end, StreamPriority priority) {
@@ -822,7 +824,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
         // remove decompressor as its not needed anymore once connection was upgraded to websockets
         ctx.pipeline().remove(handler);
       }
-      WebSocketImpl webSocket = new WebSocketImpl(vertx, Http1xClientConnection.this, supportsContinuation,
+      WebSocketImpl webSocket = new WebSocketImpl(vertx, Http1xClientConnection.this.getContext(), Http1xClientConnection.this, supportsContinuation,
                                                   options.getMaxWebsocketFrameSize(),
                                                   options.getMaxWebsocketMessageSize());
       ws = webSocket;
@@ -922,10 +924,12 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
   }
 
   @Override
-  public void createStream(Handler<AsyncResult<HttpClientStream>> handler) {
+  public void createStream(ContextInternal context, Handler<AsyncResult<HttpClientStream>> handler) {
     StreamImpl stream;
     synchronized (this) {
-      stream = new StreamImpl(this, seq++, handler);
+      ContextInternal sub = getContext().createSubContext();
+      sub.localContextData().putAll(context.localContextData());
+      stream = new StreamImpl(sub, this, seq++, handler);
       if (requestInProgress != null) {
         requestInProgress.append(stream);
         return;

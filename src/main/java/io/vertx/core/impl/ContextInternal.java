@@ -29,10 +29,10 @@ import java.util.concurrent.ConcurrentMap;
  */
 public interface ContextInternal extends Context {
 
-  static void setContext(ContextInternal context) {
+  static ContextInternal setContext(ContextInternal context) {
     Thread current = Thread.currentThread();
     if (current instanceof VertxThread) {
-      ((VertxThread)current).setContext(context);
+      return ((VertxThread)current).setContext(context);
     } else {
       throw new IllegalStateException("Attempt to setContext on non Vert.x thread " + Thread.currentThread());
     }
@@ -146,8 +146,15 @@ public interface ContextInternal extends Context {
   ConcurrentMap<Object, Object> contextData();
 
   /**
+   * @return the {@link ConcurrentMap} used to store local context data
+   */
+  ConcurrentMap<Object, Object> localContextData();
+
+  /**
    * @return the classloader associated with this context
    */
   ClassLoader classLoader();
+
+  ContextInternal createSubContext();
 
 }

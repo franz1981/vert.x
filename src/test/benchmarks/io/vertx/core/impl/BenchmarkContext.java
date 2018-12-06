@@ -29,6 +29,10 @@ public class BenchmarkContext extends ContextImpl {
     super(vertx, internalBlockingPool, workerPool, deploymentID, config, tccl);
   }
 
+  private BenchmarkContext(BenchmarkContext context) {
+    super(context);
+  }
+
   @Override
   void executeAsync(Handler<Void> task) {
     execute(null, task);
@@ -47,5 +51,10 @@ public class BenchmarkContext extends ContextImpl {
   @Override
   public boolean isEventLoopContext() {
     return false;
+  }
+
+  @Override
+  public ContextInternal createSubContext() {
+    return new BenchmarkContext(this);
   }
 }

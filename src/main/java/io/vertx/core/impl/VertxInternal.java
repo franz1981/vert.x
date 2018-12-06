@@ -128,4 +128,9 @@ public interface VertxInternal extends Vertx {
   void addCloseHook(Closeable hook);
 
   void removeCloseHook(Closeable hook);
+
+  default <T> Handler<T> captureContinuation(Handler<T> handler) {
+    return handler;
+  }
+
 }

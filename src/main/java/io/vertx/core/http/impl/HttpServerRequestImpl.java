@@ -19,11 +19,13 @@ import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import io.netty.util.CharsetUtil;
 import io.vertx.codegen.annotations.Nullable;
+import io.vertx.core.Context;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.*;
 import io.vertx.core.http.HttpVersion;
+import io.vertx.core.impl.ContextInternal;
 import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -57,6 +59,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
   private static final Logger log = LoggerFactory.getLogger(HttpServerRequestImpl.class);
 
   private final Http1xServerConnection conn;
+  private final ContextInternal context;
 
   private DefaultHttpRequest request;
   private io.vertx.core.http.HttpVersion version;
@@ -89,6 +92,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
 
   HttpServerRequestImpl(Http1xServerConnection conn, DefaultHttpRequest request) {
     this.conn = conn;
+    this.context = conn.getContext().createSubContext();
     this.request = request;
   }
 
@@ -134,15 +138,29 @@ public class HttpServerRequestImpl implements HttpServerRequest {
     }
   }
 
-  void handleBegin() {
-    if (Metrics.METRICS_ENABLED) {
-      reportRequestBegin();
+  private void reportAfterRequestBegin() {
+    if (conn.metrics != null) {
+      conn.metrics.afterRequestBegin(metric);
     }
-    response = new HttpServerResponseImpl((VertxInternal) conn.vertx(), conn, request, metric);
+  }
+
+  void handleBeginMetrics() {
+    reportRequestBegin();
+    try {
+      handleBegin();
+    } finally {
+      if (Metrics.METRICS_ENABLED) {
+        reportAfterRequestBegin();
+      }
+    }
+  }
+
+  void handleBegin() {
+    response = new HttpServerResponseImpl((VertxInternal) conn.vertx(), context, conn, request, metric);
     if (conn.handle100ContinueAutomatically) {
       check100();
     }
-    conn.getContext().dispatch(this, conn.requestHandler);
+    context.dispatch(this, conn.requestHandler);
   }
 
   void appendRequest(HttpServerRequestImpl next) {
@@ -171,7 +189,9 @@ public class HttpServerRequestImpl implements HttpServerRequest {
 
   private void reportRequestBegin() {
     if (conn.metrics != null) {
+      ContextInternal prev = ContextInternal.setContext(context);
       metric = conn.metrics.requestBegin(conn.metric(), this);
+      ContextInternal.setContext(prev);
     }
   }
 
@@ -500,7 +520,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
         }
       }
       if (dataHandler != null) {
-        conn.getContext().dispatch(data, dataHandler);
+        context.dispatch(data, dataHandler);
       }
     }
   }
@@ -520,7 +540,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
     }
     // If there have been uploads then we let the last one call the end handler once any fileuploads are complete
     if (endHandler != null) {
-      conn.getContext().dispatch(null, endHandler);
+      context.dispatch(null, endHandler);
     }
   }
 
@@ -566,7 +586,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
       resp.handleException(t);
     }
     if (handler != null) {
-      conn.getContext().dispatch(t, handler);
+      context.dispatch(t, handler);
     }
   }
 

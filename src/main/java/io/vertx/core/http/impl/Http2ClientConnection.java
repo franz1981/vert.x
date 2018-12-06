@@ -104,7 +104,7 @@ class Http2ClientConnection extends Http2ConnectionBase implements HttpClientCon
   }
 
   @Override
-  public void createStream(Handler<AsyncResult<HttpClientStream>> completionHandler) {
+  public void createStream(ContextInternal context, Handler<AsyncResult<HttpClientStream>> completionHandler) {
     Future<HttpClientStream> fut;
     synchronized (this) {
       Http2Connection conn = handler.connection();

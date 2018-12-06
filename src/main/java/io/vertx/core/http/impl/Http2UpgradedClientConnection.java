@@ -258,9 +258,9 @@ public class Http2UpgradedClientConnection implements HttpClientConnection {
   }
 
   @Override
-  public void createStream(Handler<AsyncResult<HttpClientStream>> handler) {
+  public void createStream(ContextInternal context, Handler<AsyncResult<HttpClientStream>> handler) {
     if (current instanceof Http1xClientConnection) {
-      current.createStream(ar -> {
+      current.createStream(context, ar -> {
         if (ar.succeeded()) {
           HttpClientStream stream = ar.result();
           UpgradingStream upgradingStream = new UpgradingStream(stream, (Http1xClientConnection) current);
@@ -270,7 +270,7 @@ public class Http2UpgradedClientConnection implements HttpClientConnection {
         }
       });
     } else {
-      current.createStream(handler);
+      current.createStream(context, handler);
     }
   }
 

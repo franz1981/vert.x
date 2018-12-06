@@ -68,6 +68,9 @@ public interface HttpServerMetrics<R, W, S> extends TCPMetrics<S> {
   default void responseBegin(R requestMetric, HttpServerResponse response) {
   }
 
+  default void afterRequestBegin(R requestMetric) {
+  }
+
   /**
    * Called when an http server response is pushed.
    *

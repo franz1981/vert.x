@@ -29,6 +29,7 @@ import io.vertx.test.core.Repeat;
 import io.vertx.test.core.CheckingSender;
 import io.vertx.test.verticles.SimpleServer;
 import io.vertx.test.core.TestUtils;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -1626,7 +1627,7 @@ public class Http1xTest extends HttpTest {
       theServer.requestHandler(req -> {
         Context ctx = Vertx.currentContext();
         if (context.get() != null) {
-          assertSame(ctx, context.get());
+          assertSameEventLoop(ctx, context.get());
         } else {
           context.set(ctx);
           contexts.add(ctx);
@@ -2029,7 +2030,7 @@ public class Http1xTest extends HttpTest {
         // This should warn in the log (console) as we are called back on the connection context
         // and not on the context doing the request
         // checker.accept(req4);
-        assertEquals(1, contexts.size());
+        assertEquals(1, contexts.stream().map(context -> ((ContextInternal)context).nettyEventLoop()).distinct().count());
         assertEquals(1, connections.size());
         assertNotSame(Vertx.currentContext(), ctx);
         testComplete();
@@ -2058,14 +2059,14 @@ public class Http1xTest extends HttpTest {
     startServer();
     Context clientCtx = vertx.getOrCreateContext();
     HttpClientRequest req = client.get(DEFAULT_HTTP_PORT, DEFAULT_HTTP_HOST, DEFAULT_TEST_URI, onFailure(err -> {
-      assertSame(clientCtx, Vertx.currentContext());
+      assertSameEventLoop(clientCtx, Vertx.currentContext());
       complete();
     }));
     clientCtx.runOnContext(v -> {
       req.sendHead();
     });
     req.exceptionHandler(err -> {
-      assertSame(clientCtx, Vertx.currentContext());
+      assertSameEventLoop(clientCtx, Vertx.currentContext());
       complete();
     });
     await();
@@ -2098,14 +2099,14 @@ public class Http1xTest extends HttpTest {
         requestResumeMap.get(req.path()).thenAccept(v -> {
           req.resume();
         });
-        assertSame(serverCtx, Vertx.currentContext());
+        assertSameEventLoop(serverCtx, Vertx.currentContext());
         Buffer body = Buffer.buffer();
         req.handler(chunk -> {
-          assertSame(serverCtx, Vertx.currentContext());
+          assertSameEventLoop(serverCtx, Vertx.currentContext());
           body.appendBuffer(chunk);
         });
         req.endHandler(v2 -> {
-          assertSame(serverCtx, Vertx.currentContext());
+          assertSameEventLoop(serverCtx, Vertx.currentContext());
           requests.add(req);
           if (requests.size() == 4) {
             requests.forEach(req_ ->{
@@ -2116,7 +2117,7 @@ public class Http1xTest extends HttpTest {
               fill(data, resp, () -> {
                 cf.complete(null);
                 resp.drainHandler(v -> {
-                  assertSame(serverCtx, Vertx.currentContext());
+                  assertSameEventLoop(serverCtx, Vertx.currentContext());
                   resp.end();
                 });
               });
@@ -2125,7 +2126,7 @@ public class Http1xTest extends HttpTest {
         });
       });
       server.listen(onSuccess(s -> {
-        assertSame(serverCtx, Vertx.currentContext());
+        assertSameEventLoop(serverCtx, Vertx.currentContext());
         latch.countDown();
       }));
     });
@@ -2144,7 +2145,7 @@ public class Http1xTest extends HttpTest {
       requestResumeMap.put(path, cf);
       Context clientCtx = vertx.getOrCreateContext();
       HttpClientRequest req = client.request(HttpMethod.GET, DEFAULT_HTTP_PORT, DEFAULT_HTTP_HOST, path, onSuccess(resp -> {
-        assertSame(clientCtx, Vertx.currentContext());
+        assertSameEventLoop(clientCtx, Vertx.currentContext());
         assertEquals(200, resp.statusCode());
         contexts.add(((VertxInternal) vertx).getContext());
         resp.pause();
@@ -2152,11 +2153,11 @@ public class Http1xTest extends HttpTest {
           resp.resume();
         });
         resp.handler(chunk -> {
-          assertSame(clientCtx, Vertx.currentContext());
+          assertSameEventLoop(clientCtx, Vertx.currentContext());
         });
         resp.exceptionHandler(this::fail);
         resp.endHandler(v -> {
-          assertSame(clientCtx, Vertx.currentContext());
+          assertSameEventLoop(clientCtx, Vertx.currentContext());
           if (cnt.incrementAndGet() == numReqs) {
             int size = contexts.size();
             // Some connections might get closed if response comes back quick enough hence the >=
@@ -2167,12 +2168,12 @@ public class Http1xTest extends HttpTest {
       })).setChunked(true).exceptionHandler(this::fail);
       CountDownLatch drainLatch = new CountDownLatch(1);
       req.drainHandler(v -> {
-        assertSame(clientCtx, Vertx.currentContext());
+        assertSameEventLoop(clientCtx, Vertx.currentContext());
         drainLatch.countDown();
       });
       clientCtx.runOnContext(v -> {
         req.sendHead(version -> {
-          assertSame(clientCtx, Vertx.currentContext());
+          assertSameEventLoop(clientCtx, Vertx.currentContext());
           fill(data, req, () -> {
             cf.complete(null);
           });
