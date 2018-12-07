@@ -97,6 +97,39 @@ public interface ContextInternal extends Context {
   <T> void executeFromIO(T value, Handler<T> task);
 
   /**
+   * @see #schedule(Object, Handler)
+   */
+  void schedule(Handler<Void> task);
+
+  /**
+   * Schedule a task to be executed on this context, the task will be executed according to the
+   * context concurrency model, on an event-loop context, the task is executed directly, on a worker
+   * context the task is executed on the worker thread pool.
+   *
+   * @param value the task value
+   * @param task the task
+   */
+  <T> void schedule(T value, Handler<T> task);
+
+  /**
+   * @see #dispatch(Object, Handler)
+   */
+  void dispatch(Handler<Void> task);
+
+  /**
+   * Dispatch a task on this context. The task is executed directly by the caller thread which must be a
+   * {@link VertxThread}.
+   * <p>
+   * The task execution is monitored by the blocked thread checker.
+   * <p>
+   * This context is thread-local associated during the task execution.
+   *
+   * @param value the task value
+   * @param task the task to execute
+   */
+  <T> void dispatch(T value, Handler<T> task);
+
+  /**
    * Report an exception to this context synchronously.
    * <p>
    * The exception handler will be called when there is one, otherwise the exception will be logged.

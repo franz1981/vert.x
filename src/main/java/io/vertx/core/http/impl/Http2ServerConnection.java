@@ -128,21 +128,18 @@ public class Http2ServerConnection extends Http2ConnectionBase {
         req.response().writeContinue();
       }
       streams.put(streamId, req);
-      context.executeFromIO(v -> {
-        Http2ServerResponseImpl resp = req.response();
-        resp.beginRequest();
-        requestHandler.handle(req);
-        boolean hasPush = resp.endRequest();
-        if (hasPush) {
-          ctx.flush();
-        }
-      });
+      Http2ServerResponseImpl resp = req.response();
+      resp.beginRequest();
+      context.dispatch(req, requestHandler);
+      boolean hasPush = resp.endRequest();
+      if (hasPush) {
+        ctx.flush();
+      }
     } else {
       // Http server request trailer - not implemented yet (in api)
     }
     if (endOfStream) {
-      VertxHttp2Stream finalStream = stream;
-      context.executeFromIO(v -> finalStream.onEnd());
+      stream.onEnd();
     }
   }
 
@@ -190,15 +187,13 @@ public class Http2ServerConnection extends Http2ConnectionBase {
             streams.put(promisedStreamId, push);
             if (maxConcurrentStreams == null || concurrentStreams < maxConcurrentStreams) {
               concurrentStreams++;
-              context.executeFromIO(v -> push.complete());
+              push.complete();
             } else {
               pendingPushes.add(push);
             }
           }
         } else {
-          context.executeFromIO(v -> {
-            completionHandler.handle(Future.failedFuture(ar.cause()));
-          });
+          context.dispatch(Future.failedFuture(ar.cause()), completionHandler);
         }
       }
     });
@@ -270,7 +265,7 @@ public class Http2ServerConnection extends Http2ConnectionBase {
       if (response != null) {
         response.callReset(errorCode);
       } else {
-        completionHandler.fail(new StreamResetException(errorCode));
+        context.dispatch(Future.failedFuture(new StreamResetException(errorCode)), completionHandler);
       }
     }
 
@@ -304,7 +299,7 @@ public class Http2ServerConnection extends Http2ConnectionBase {
         if (METRICS_ENABLED && metrics != null) {
           response.metric(metrics.responsePushed(conn.metric(), method, uri, response));
         }
-        completionHandler.complete(response);
+        context.dispatch(Future.succeededFuture(response), completionHandler);
       }
     }
   }

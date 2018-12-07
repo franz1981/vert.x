@@ -156,6 +156,21 @@ abstract class ContextImpl implements ContextInternal {
   }
 
   @Override
+  public final void schedule(Handler<Void> task) {
+    schedule(null, task);
+  }
+
+  @Override
+  public final void dispatch(Handler<Void> task) {
+    dispatch(null, task);
+  }
+
+  @Override
+  public final <T> void dispatch(T value, Handler<T> task) {
+    executeTask(value, task);
+  }
+
+  @Override
   public final <T> void executeFromIO(T value, Handler<T> task) {
     if (THREAD_CHECKS) {
       checkEventLoopThread();
@@ -303,6 +318,7 @@ abstract class ContextImpl implements ContextInternal {
     } finally {
       // We don't unset the context after execution - this is done later when the context is closed via
       // VertxThreadFactory
+      current.setContext(null);
       if (!DISABLE_TIMINGS) {
         current.executeEnd();
       }

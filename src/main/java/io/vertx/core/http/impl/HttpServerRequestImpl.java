@@ -142,7 +142,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
     if (conn.handle100ContinueAutomatically) {
       check100();
     }
-    conn.requestHandler.handle(this);
+    conn.getContext().dispatch(this, conn.requestHandler);
   }
 
   void appendRequest(HttpServerRequestImpl next) {
@@ -500,7 +500,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
         }
       }
       if (dataHandler != null) {
-        dataHandler.handle(data);
+        conn.getContext().dispatch(data, dataHandler);
       }
     }
   }
@@ -520,7 +520,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
     }
     // If there have been uploads then we let the last one call the end handler once any fileuploads are complete
     if (endHandler != null) {
-      endHandler.handle(null);
+      conn.getContext().dispatch(null, endHandler);
     }
   }
 
@@ -566,7 +566,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
       resp.handleException(t);
     }
     if (handler != null) {
-      handler.handle(t);
+      conn.getContext().dispatch(t, handler);
     }
   }
 

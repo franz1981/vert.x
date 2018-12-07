@@ -130,7 +130,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
       copy = new ArrayList<>(streams.values());
     }
     for (VertxHttp2Stream stream : copy) {
-      context.executeFromIO(v -> stream.handleException(cause));
+      stream.handleException(cause);
     }
     handleException(cause);
   }
@@ -151,7 +151,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
       stream = streams.get(s.id());
     }
     if (stream != null) {
-      context.executeFromIO(v -> stream.onWritabilityChanged());
+      context.schedule(null, v -> stream.onWritabilityChanged());
     }
   }
 
@@ -163,7 +163,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
         return;
       }
     }
-    context.executeFromIO(v -> removed.handleClose());
+    removed.handleClose();
     checkShutdownHandler();
   }
 
@@ -188,7 +188,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
     }
     if (handler != null) {
       Buffer buffer = Buffer.buffer(debugData);
-      context.executeFromIO(v -> handler.handle(new GoAway().setErrorCode(errorCode).setLastStreamId(lastStreamId).setDebugData(buffer)));
+      context.dispatch(new GoAway().setErrorCode(errorCode).setLastStreamId(lastStreamId).setDebugData(buffer), handler);
     }
     checkShutdownHandler();
   }
@@ -206,7 +206,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
           .setDependency(streamDependency)
           .setWeight(weight)
           .setExclusive(exclusive);
-        context.executeFromIO(v -> stream.handlePriorityChange(streamPriority));
+        stream.handlePriorityChange(streamPriority);
       }
   }
 
@@ -223,7 +223,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
     }
     if (handler != null) {
       // No need to run on a particular context it shall be done by the handler instead
-      context.executeFromIO(handler);
+      context.dispatch(handler);
     }
   }
 
@@ -250,7 +250,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
       handler = remoteSettingsHandler;
     }
     if (handler != null) {
-      context.executeFromIO(HttpUtils.toVertxSettings(settings), handler);
+      context.dispatch(HttpUtils.toVertxSettings(settings), handler);
     }
     if (changed) {
       concurrencyChanged(maxConcurrentStreams);
@@ -262,7 +262,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
     Handler<Buffer> handler = pingHandler;
     if (handler != null) {
       Buffer buff = Buffer.buffer().appendLong(data);
-      context.executeFromIO(v -> handler.handle(buff));
+      context.dispatch(buff, handler);
     }
   }
 
@@ -270,10 +270,8 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
   public void onPingAckRead(ChannelHandlerContext ctx, long data) throws Http2Exception {
     Handler<AsyncResult<Buffer>> handler = pongHandlers.poll();
     if (handler != null) {
-      context.executeFromIO(v -> {
-        Buffer buff = Buffer.buffer().appendLong(data);
-        handler.handle(Future.succeededFuture(buff));
-      });
+      Buffer buff = Buffer.buffer().appendLong(data);
+      context.dispatch(Future.succeededFuture(buff), handler);
     }
   }
 
@@ -299,7 +297,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
     }
     if (req != null) {
       Buffer buff = Buffer.buffer(safeBuffer(payload, ctx.alloc()));
-      context.executeFromIO(v -> req.handleCustomFrame(frameType, flags.value(), buff));
+      req.handleCustomFrame(frameType, flags.value(), buff);
     }
   }
 
@@ -312,7 +310,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
         return;
       }
     }
-    context.executeFromIO(v -> req.onResetRead(errorCode));
+    req.onResetRead(errorCode);
   }
 
   @Override
@@ -325,14 +323,12 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
     if (req != null) {
       data = safeBuffer(data, ctx.alloc());
       Buffer buff = Buffer.buffer(data);
-      context.executeFromIO(v -> {
-        int len = buff.length();
-        if (req.onDataRead(buff)) {
-          consumed[0] += len;
-        }
-      });
+      int len = buff.length();
+      if (req.onDataRead(buff)) {
+        consumed[0] += len;
+      }
       if (endOfStream) {
-        context.executeFromIO(v -> req.onEnd());
+        req.onEnd();
       }
     }
     return consumed[0];
@@ -509,7 +505,7 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
       shutdownHandler = this.shutdownHandler;
     }
     if (shutdownHandler != null) {
-      context.executeFromIO(shutdownHandler);
+      context.dispatch(shutdownHandler);
     }
   }
 }
