@@ -36,9 +36,11 @@ import io.vertx.core.impl.ContextInternal;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.core.net.NetSocket;
+import io.vertx.core.net.impl.ConnectionBase;
 import io.vertx.core.net.impl.NetSocketImpl;
 import io.vertx.core.net.impl.VertxHandler;
 import io.vertx.core.spi.metrics.HttpClientMetrics;
+import io.vertx.core.spi.tracing.Tracer;
 import io.vertx.core.streams.impl.InboundBuffer;
 
 import java.net.URI;
@@ -205,6 +207,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
     private InboundBuffer<Buffer> queue;
     private MultiMap trailers;
     private StreamImpl next;
+    private Object trace;
 
     StreamImpl(ContextInternal context, Http1xClientConnection conn, int id, Handler<AsyncResult<HttpClientStream>> handler) {
       this.context = context;
@@ -391,6 +394,10 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
           Object reqMetric = conn.metrics.requestBegin(conn.endpointMetric, conn.metric(), conn.localAddress(), conn.remoteAddress(), request);
           request.metric(reqMetric);
         }
+        Tracer tracer = context.owner().tracer();
+        if (tracer != null) {
+          request.trace(tracer.sendRequest(request.stream.getContext().localContextData(), request));
+        }
       }
     }
 
@@ -481,14 +488,18 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
 
     private boolean endResponse(LastHttpContent trailer) {
       synchronized (conn) {
+        HttpClientRequestImpl req = request;
         if (conn.metrics != null) {
-          HttpClientRequestBase req = request;
           Object reqMetric = req.metric();
           if (req.exceptionOccurred != null) {
             conn.metrics.requestReset(reqMetric);
           } else {
             conn.metrics.responseEnd(reqMetric, response);
           }
+        }
+        Tracer tracer = context.owner().tracer();
+        if (tracer != null) {
+          tracer.receiveResponse(context.localContextData(), response, req.trace(), null);
         }
         trailers = new HeadersAdaptor(trailer.trailingHeaders());
         if (queue.isEmpty()) {
@@ -864,12 +875,16 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
       metrics.endpointDisconnected(endpointMetric, metric());
     }
     WebSocketImpl ws;
+    Tracer tracer = context.owner().tracer();
     List<StreamImpl> list = Collections.emptyList();
     synchronized (this) {
       ws = this.ws;
       for (StreamImpl r = responseInProgress;r != null;r = r.next) {
         if (metrics != null) {
           metrics.requestReset(r.request.metric());
+        }
+        if (tracer != null) {
+          tracer.receiveResponse(r.context.localContextData(), null, r.trace, ConnectionBase.CLOSED_EXCEPTION);
         }
         if (list.isEmpty()) {
           list = new ArrayList<>();
@@ -927,8 +942,7 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
   public void createStream(ContextInternal context, Handler<AsyncResult<HttpClientStream>> handler) {
     StreamImpl stream;
     synchronized (this) {
-      ContextInternal sub = getContext().createSubContext();
-      sub.localContextData().putAll(context.localContextData());
+      ContextInternal sub = getContext().createTraceContext(context);
       stream = new StreamImpl(sub, this, seq++, handler);
       if (requestInProgress != null) {
         requestInProgress.append(stream);

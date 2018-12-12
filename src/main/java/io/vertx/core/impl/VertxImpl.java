@@ -52,6 +52,7 @@ import io.vertx.core.net.impl.ServerID;
 import io.vertx.core.net.impl.transport.Transport;
 import io.vertx.core.shareddata.SharedData;
 import io.vertx.core.shareddata.impl.SharedDataImpl;
+import io.vertx.core.spi.TracerFactory;
 import io.vertx.core.spi.VerticleFactory;
 import io.vertx.core.spi.VertxMetricsFactory;
 import io.vertx.core.spi.cluster.ClusterManager;
@@ -59,6 +60,7 @@ import io.vertx.core.spi.metrics.Metrics;
 import io.vertx.core.spi.metrics.MetricsProvider;
 import io.vertx.core.spi.metrics.PoolMetrics;
 import io.vertx.core.spi.metrics.VertxMetrics;
+import io.vertx.core.spi.tracing.Tracer;
 
 import java.io.File;
 import java.io.IOException;
@@ -134,6 +136,7 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
   private final TimeUnit defaultWorkerMaxExecTimeUnit;
   private final CloseHooks closeHooks;
   private final Transport transport;
+  private final Tracer tracer;
 
   private VertxImpl(VertxOptions options, Transport transport) {
     // Sanity check
@@ -169,6 +172,7 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
     this.addressResolverOptions = options.getAddressResolverOptions();
     this.addressResolver = new AddressResolver(this, options.getAddressResolverOptions());
     this.deploymentManager = new DeploymentManager(this);
+    this.tracer = getTracer(options);
     if (options.isClustered()) {
       this.clusterManager = getClusterManager(options);
       this.eventBus = new ClusteredEventBus(this, options, clusterManager);
@@ -448,6 +452,14 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
     return null;
   }
 
+  private Tracer getTracer(VertxOptions options) {
+    Tracer tracer = options.getTracer();
+    if (tracer == null) {
+      // tracer = Tracer.factory.tracer();
+    }
+    return tracer;
+  }
+
   private ClusterManager getClusterManager(VertxOptions options) {
     ClusterManager mgr = options.getClusterManager();
     if (mgr == null) {
@@ -495,6 +507,11 @@ public class VertxImpl implements VertxInternal, MetricsProvider {
       return context;
     }
     return null;
+  }
+
+  @Override
+  public Tracer tracer() {
+    return tracer;
   }
 
   public ClusterManager getClusterManager() {

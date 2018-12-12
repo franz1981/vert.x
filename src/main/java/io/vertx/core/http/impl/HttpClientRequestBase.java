@@ -34,6 +34,7 @@ public abstract class HttpClientRequestBase implements HttpClientRequest {
   private long lastDataReceived;
   protected Throwable exceptionOccurred;
   private Object metric;
+  private Object trace;
 
   HttpClientRequestBase(HttpClientImpl client, boolean ssl, HttpMethod method, String host, int port, String uri) {
     this.client = client;
@@ -52,6 +53,14 @@ public abstract class HttpClientRequestBase implements HttpClientRequest {
 
   void metric(Object metric) {
     this.metric = metric;
+  }
+
+  Object trace() {
+    return trace;
+  }
+
+  void trace(Object trace) {
+    this.trace = trace;
   }
 
   protected abstract void doHandleResponse(HttpClientResponseImpl resp, long timeoutMs);

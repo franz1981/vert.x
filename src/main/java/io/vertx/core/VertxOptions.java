@@ -19,6 +19,7 @@ import io.vertx.core.impl.cpu.CpuCoreSensor;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.metrics.MetricsOptions;
 import io.vertx.core.spi.cluster.ClusterManager;
+import io.vertx.core.spi.tracing.Tracer;
 
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -165,6 +166,7 @@ public class VertxOptions {
   private TimeUnit maxWorkerExecuteTimeUnit = DEFAULT_MAX_WORKER_EXECUTE_TIME_UNIT;
   private TimeUnit warningExceptionTimeUnit = DEFAULT_WARNING_EXCEPTION_TIME_UNIT;
   private TimeUnit blockedThreadCheckIntervalUnit = DEFAULT_BLOCKED_THREAD_CHECK_INTERVAL_UNIT;
+  private Tracer tracer;
 
   /**
    * Default constructor
@@ -833,6 +835,15 @@ public class VertxOptions {
    */
   public VertxOptions setBlockedThreadCheckIntervalUnit(TimeUnit blockedThreadCheckIntervalUnit) {
     this.blockedThreadCheckIntervalUnit = blockedThreadCheckIntervalUnit;
+    return this;
+  }
+
+  public Tracer getTracer() {
+    return tracer;
+  }
+
+  public VertxOptions setTracer(Tracer tracer) {
+    this.tracer = tracer;
     return this;
   }
 

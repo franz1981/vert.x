@@ -19,7 +19,6 @@ import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import io.netty.util.CharsetUtil;
 import io.vertx.codegen.annotations.Nullable;
-import io.vertx.core.Context;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
@@ -32,6 +31,7 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.spi.metrics.Metrics;
+import io.vertx.core.spi.tracing.Tracer;
 import io.vertx.core.streams.impl.InboundBuffer;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -72,6 +72,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
   private HttpServerResponseImpl response;
   private HttpServerRequestImpl next;
   private Object metric;
+  private Object trace;
 
   private Handler<Buffer> dataHandler;
   private Handler<Throwable> exceptionHandler;
@@ -92,7 +93,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
 
   HttpServerRequestImpl(Http1xServerConnection conn, DefaultHttpRequest request) {
     this.conn = conn;
-    this.context = conn.getContext().createSubContext();
+    this.context = conn.getContext().createTraceContext();
     this.request = request;
   }
 
@@ -106,6 +107,10 @@ public class HttpServerRequestImpl implements HttpServerRequest {
     synchronized (conn) {
       this.request = request;
     }
+  }
+
+  ContextInternal context() {
+    return context;
   }
 
   private InboundBuffer<Buffer> pendingQueue() {
@@ -193,6 +198,10 @@ public class HttpServerRequestImpl implements HttpServerRequest {
       metric = conn.metrics.requestBegin(conn.metric(), this);
       ContextInternal.setContext(prev);
     }
+    Tracer tracer = context.owner().tracer();
+    if (tracer != null) {
+      trace = tracer.receiveRequest(context.localContextData(), this);
+    }
   }
 
   private void check100() {
@@ -203,6 +212,10 @@ public class HttpServerRequestImpl implements HttpServerRequest {
 
   Object metric() {
     return metric;
+  }
+
+  Object trace() {
+    return trace;
   }
 
   @Override
@@ -577,7 +590,7 @@ public class HttpServerRequestImpl implements HttpServerRequest {
       }
       if (!response.ended()) {
         if (METRICS_ENABLED) {
-          reportRequestReset();
+          reportRequestReset(t);
         }
         resp = response;
       }
@@ -590,9 +603,13 @@ public class HttpServerRequestImpl implements HttpServerRequest {
     }
   }
 
-  private void reportRequestReset() {
+  private void reportRequestReset(Throwable err) {
     if (conn.metrics != null) {
       conn.metrics.requestReset(metric);
+    }
+    Tracer tracer = context.owner().tracer();
+    if (tracer != null) {
+      tracer.sendResponse(context.localContextData(), null, trace, err);
     }
   }
 

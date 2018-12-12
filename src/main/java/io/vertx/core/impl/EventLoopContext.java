@@ -34,8 +34,8 @@ public class EventLoopContext extends ContextImpl {
     super(vertx, eventLoop, internalBlockingPool, workerPool, deploymentID, config, tccl);
   }
 
-  private EventLoopContext(EventLoopContext context) {
-    super(context);
+  private EventLoopContext(EventLoopContext context, ContextImpl foo) {
+    super(context, foo);
   }
 
   void executeAsync(Handler<Void> task) {
@@ -58,7 +58,12 @@ public class EventLoopContext extends ContextImpl {
   }
 
   @Override
-  public ContextInternal createSubContext() {
-    return new EventLoopContext(this);
+  public ContextInternal createTraceContext() {
+    return new EventLoopContext(this, null);
+  }
+
+  @Override
+  public ContextInternal createTraceContext(ContextInternal in) {
+    return new EventLoopContext(this, (ContextImpl) in);
   }
 }

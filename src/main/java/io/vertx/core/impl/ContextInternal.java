@@ -155,6 +155,8 @@ public interface ContextInternal extends Context {
    */
   ClassLoader classLoader();
 
-  ContextInternal createSubContext();
+  ContextInternal createTraceContext();
+
+  ContextInternal createTraceContext(ContextInternal in);
 
 }

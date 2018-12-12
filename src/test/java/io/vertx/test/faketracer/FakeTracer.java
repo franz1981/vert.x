@@ -13,28 +13,26 @@ package io.vertx.test.faketracer;
 
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClientRequest;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.impl.ContextInternal;
+import io.vertx.core.spi.tracing.Tracer;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Pavol Loffay
  */
-public class FakeTracer {
+public class FakeTracer implements Tracer<Span, Span> {
 
   private static final Object ACTIVE_SCOPE_KEY = "active.scope";
 
-  private final Vertx vertx;
   private AtomicInteger idGenerator = new AtomicInteger(0);
   List<Span> finishedSpans = new CopyOnWriteArrayList<>();
-
-  public FakeTracer(Vertx vertx) {
-    this.vertx = vertx;
-  }
 
   private int nextId() {
     return idGenerator.getAndIncrement();
@@ -49,18 +47,19 @@ public class FakeTracer {
   }
 
   public Span activeSpan() {
-    return activeSpan((ContextInternal) Vertx.currentContext());
+    return activeSpan(((ContextInternal) Vertx.currentContext()).localContextData());
   }
 
-  public Span activeSpan(ContextInternal ctx) {
-    ConcurrentMap<Object, Object> data = ctx.localContextData();
+  public Span activeSpan(Map<Object, Object> data) {
     Scope scope = (Scope) data.get(ACTIVE_SCOPE_KEY);
     return scope != null ? scope.wrapped : null;
   }
 
   public Scope activate(Span span) {
-    ContextInternal requestCtx = (ContextInternal) Vertx.currentContext();
-    ConcurrentMap<Object, Object> data = requestCtx.localContextData();
+    return activate(((ContextInternal)Vertx.currentContext()).localContextData(), span);
+  }
+
+  public Scope activate(Map<Object, Object> data, Span span) {
     Scope toRestore = (Scope) data.get(ACTIVE_SCOPE_KEY);
     Scope active = new Scope(this, span, toRestore);
     data.put(ACTIVE_SCOPE_KEY, active);
@@ -82,6 +81,60 @@ public class FakeTracer {
           Integer.parseInt(spanId));
     }
     return null;
+  }
+
+  @Override
+  public Span receiveRequest(Map<Object, Object> context, Object inbound) {
+    if (inbound instanceof HttpServerRequest) {
+      HttpServerRequest request = (HttpServerRequest) inbound;
+      Span serverSpan;
+      Span parent = decode(request.headers());
+      if (parent != null) {
+        serverSpan = createChild(parent);
+      } else {
+        serverSpan = newTrace();
+      }
+      serverSpan.addTag("span_kind", "server");
+      serverSpan.addTag("path", request.path());
+      serverSpan.addTag("query", request.query());
+
+      // Create scope
+      return activate(context, serverSpan).span();
+    }
+    return null;
+  }
+
+  @Override
+  public void sendResponse(Map<Object, Object> context, Object response, Span span, Throwable failed) {
+    if (span != null) {
+      span.finish();
+    }
+  }
+
+  @Override
+  public Span sendRequest(Map<Object, Object> context, Object outbound) {
+    if (outbound instanceof HttpClientRequest) {
+      HttpClientRequest request = (HttpClientRequest) outbound;
+      Span span = activeSpan(context);
+      if (span == null) {
+        span = newTrace();
+      } else {
+        span = createChild(span);
+      }
+      span.addTag("span_kind", "client");
+      span.addTag("path", request.path());
+      span.addTag("query", request.query());
+      encode(span, request.headers());
+      return span;
+    }
+    return null;
+  }
+
+  @Override
+  public void receiveResponse(Map<Object, Object> context, Object response, Span span, Throwable failed) {
+    if (span != null) {
+      span.finish();
+    }
   }
 
   public List<Span> getFinishedSpans() {

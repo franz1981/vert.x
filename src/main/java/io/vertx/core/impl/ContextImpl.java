@@ -91,7 +91,7 @@ abstract class ContextImpl implements ContextInternal {
     this.exceptionHandler = new AtomicReference<>();
   }
 
-  protected ContextImpl(ContextImpl context) {
+  protected ContextImpl(ContextImpl context, ContextImpl foo) {
     this.deploymentID = context.deploymentID;
     this.config = context.config;
     this.eventLoop = context.eventLoop;
@@ -103,6 +103,7 @@ abstract class ContextImpl implements ContextInternal {
     this.internalOrderedTasks = context.internalOrderedTasks;
     this.closeHooks = context.closeHooks;
     this.exceptionHandler = context.exceptionHandler;
+    this.localContextData = foo != null ? foo.localContextData : null;
   }
 
   public void setDeployment(Deployment deployment) {
@@ -384,5 +385,10 @@ abstract class ContextImpl implements ContextInternal {
       return 1;
     }
     return deployment.deploymentOptions().getInstances();
+  }
+
+  @Override
+  public ContextInternal createTraceContext() {
+    return createTraceContext(null);
   }
 }

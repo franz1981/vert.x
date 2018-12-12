@@ -25,8 +25,8 @@ class WorkerContext extends ContextImpl {
     super(vertx, internalBlockingPool, workerPool, deploymentID, config, tccl);
   }
 
-  private WorkerContext(WorkerContext context) {
-    super(context);
+  private WorkerContext(WorkerContext context, ContextImpl foo) {
+    super(context, foo);
   }
 
   @Override
@@ -78,7 +78,7 @@ class WorkerContext extends ContextImpl {
   }
 
   @Override
-  public ContextInternal createSubContext() {
-    return new WorkerContext(this);
+  public ContextInternal createTraceContext(ContextInternal in) {
+    return new WorkerContext(this, (ContextImpl) in);
   }
 }

@@ -15,6 +15,8 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 
+import java.util.concurrent.ConcurrentMap;
+
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
@@ -29,8 +31,8 @@ public class BenchmarkContext extends ContextImpl {
     super(vertx, internalBlockingPool, workerPool, deploymentID, config, tccl);
   }
 
-  private BenchmarkContext(BenchmarkContext context) {
-    super(context);
+  private BenchmarkContext(BenchmarkContext context, ContextImpl foo) {
+    super(context, foo);
   }
 
   @Override
@@ -54,7 +56,7 @@ public class BenchmarkContext extends ContextImpl {
   }
 
   @Override
-  public ContextInternal createSubContext() {
-    return new BenchmarkContext(this);
+  public ContextInternal createTraceContext(ContextInternal in) {
+    return new BenchmarkContext(this, (ContextImpl) in);
   }
 }
