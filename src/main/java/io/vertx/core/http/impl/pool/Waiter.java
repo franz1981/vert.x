@@ -20,11 +20,9 @@ import io.vertx.core.impl.ContextInternal;
  */
 final class Waiter<C> {
 
-  public final ContextInternal context;
   public final Handler<AsyncResult<C>> handler;
 
-  Waiter(ContextInternal context, Handler<AsyncResult<C>> handler) {
-    this.context = context;
+  Waiter(Handler<AsyncResult<C>> handler) {
     this.handler = handler;
   }
 }

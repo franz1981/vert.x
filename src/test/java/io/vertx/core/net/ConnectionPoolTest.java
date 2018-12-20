@@ -13,10 +13,7 @@ package io.vertx.core.net;
 
 import io.netty.channel.Channel;
 import io.netty.channel.embedded.EmbeddedChannel;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
+import io.vertx.core.*;
 import io.vertx.core.http.impl.pool.*;
 import io.vertx.core.impl.ContextInternal;
 import io.vertx.test.core.VertxTestBase;
@@ -35,6 +32,7 @@ public class ConnectionPoolTest extends VertxTestBase {
 
   class FakeConnectionManager {
 
+    private final Context context = vertx.getOrCreateContext();
     private final ConnectionProvider<FakeConnection> connector;
     private final int queueMaxSize;
     private final int maxPoolSize;
@@ -85,6 +83,7 @@ public class ConnectionPoolTest extends VertxTestBase {
           seq++;
           closed = false;
           pool = new Pool<>(
+            context,
             connector,
             queueMaxSize,
             1,
@@ -105,7 +104,7 @@ public class ConnectionPoolTest extends VertxTestBase {
           );
         }
       }
-      pool.getConnection(waiter.context, waiter.handler);
+      pool.getConnection(waiter.handler);
     }
   }
 
@@ -118,7 +117,7 @@ public class ConnectionPoolTest extends VertxTestBase {
       @Override
       public synchronized void handleConnection(FakeConnection conn) {
         assertNull(Vertx.currentContext());
-        assertSame(conn.context, context);
+        assertSame(conn.context, mgr.context);
         Pool<FakeConnection> pool = mgr.pool();
         handleLock.set(Thread.holdsLock(pool));
         super.handleConnection(conn);

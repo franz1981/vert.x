@@ -119,7 +119,7 @@ class ConnectionManager {
         int maxPoolSize = Math.max(client.getOptions().getMaxPoolSize(), client.getOptions().getHttp2MaxPoolSize());
         Object metric = metrics != null ? metrics.createEndpoint(host, port, maxPoolSize) : null;
         HttpChannelConnector connector = new HttpChannelConnector(client, metric, version, ssl, peerHost, host, port);
-        Pool<HttpClientConnection> pool = new Pool<>(connector, maxWaitQueueSize, connector.weight(), maxSize,
+        Pool<HttpClientConnection> pool = new Pool<>(ctx, connector, maxWaitQueueSize, connector.weight(), maxSize,
           v -> {
             if (metrics != null) {
               metrics.closeEndpoint(host, port, metric);
@@ -138,7 +138,7 @@ class ConnectionManager {
         metric = null;
       }
 
-      if (endpoint.pool.getConnection(ctx, ar -> {
+      if (endpoint.pool.getConnection(ar -> {
         if (ar.succeeded()) {
 
           HttpClientConnection conn = ar.result();

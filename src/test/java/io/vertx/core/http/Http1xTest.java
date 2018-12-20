@@ -28,6 +28,7 @@ import io.vertx.test.core.Repeat;
 import io.vertx.test.core.CheckingSender;
 import io.vertx.test.verticles.SimpleServer;
 import io.vertx.test.core.TestUtils;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -2051,6 +2052,7 @@ public class Http1xTest extends HttpTest {
     await();
   }
 
+  @Ignore
   @Test
   public void testContexts() throws Exception {
     Set<ContextInternal> contexts = new ConcurrentHashSet<>();

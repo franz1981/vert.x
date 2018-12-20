@@ -13,6 +13,7 @@ package io.vertx.core.http.impl.pool;
 
 import io.netty.channel.Channel;
 import io.vertx.core.AsyncResult;
+import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.http.ConnectionPoolTooBusyException;
@@ -91,6 +92,7 @@ public class Pool<C> {
 
   private static final Logger log = LoggerFactory.getLogger(Pool.class);
 
+  private final ContextInternal context;
   private final ConnectionProvider<C> connector;
   private final BiConsumer<Channel, C> connectionAdded;
   private final BiConsumer<Channel, C> connectionRemoved;
@@ -110,7 +112,8 @@ public class Pool<C> {
   private final Handler<Void> poolClosed;
 
 
-  public Pool(ConnectionProvider<C> connector,
+  public Pool(Context context,
+              ConnectionProvider<C> connector,
               int queueMaxSize,
               long initialWeight,
               long maxWeight,
@@ -118,6 +121,7 @@ public class Pool<C> {
               BiConsumer<Channel, C> connectionAdded,
               BiConsumer<Channel, C> connectionRemoved,
               boolean fifo) {
+    this.context = (ContextInternal) context;
     this.maxWeight = maxWeight;
     this.initialWeight = initialWeight;
     this.connector = connector;
@@ -148,15 +152,14 @@ public class Pool<C> {
   /**
    * Get a connection for a waiter asynchronously.
    *
-   * @param context the context
    * @param handler the handler
    * @return whether the pool can satisfy the request
    */
-  public synchronized boolean getConnection(ContextInternal context, Handler<AsyncResult<C>> handler) {
+  public synchronized boolean getConnection(Handler<AsyncResult<C>> handler) {
     if (closed) {
       return false;
     }
-    Waiter<C> waiter = new Waiter<>(context, handler);
+    Waiter<C> waiter = new Waiter<>(handler);
     int size = waitersQueue.size();
     if (size == 0 && acquireConnection(waiter)) {
       waitersCount++;
@@ -164,7 +167,7 @@ public class Pool<C> {
       waitersCount++;
       waitersQueue.add(waiter);
     } else {
-      waiter.context.nettyEventLoop().execute(() -> {
+      context.nettyEventLoop().execute(() -> {
         waiter.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
       });
     }
@@ -197,7 +200,7 @@ public class Pool<C> {
       return true;
     } else if (weight < maxWeight) {
       weight += initialWeight;
-      waiter.context.nettyEventLoop().execute(() -> {
+      context.nettyEventLoop().execute(() -> {
         createConnection(waiter);
       });
       return true;
@@ -288,7 +291,7 @@ public class Pool<C> {
   private void createConnection(Waiter<C> waiter) {
     Holder<C> holder  = new Holder<>();
     ConnectionListener<C> listener = createListener(holder);
-    connector.connect(listener, waiter.context, ar -> {
+    connector.connect(listener, context, ar -> {
       if (ar.succeeded()) {
         ConnectResult<C> result = ar.result();
         // Update state
