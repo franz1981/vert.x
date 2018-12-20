@@ -466,6 +466,25 @@ public class ConnectionPoolTest extends VertxTestBase {
   }
 
   @Test
+  public void testCloseRecycledConnection() {
+    FakeConnectionProvider connector = new FakeConnectionProvider();
+    FakeConnectionManager mgr = new FakeConnectionManager(2, 1, connector);
+    FakeWaiter waiter1 = new FakeWaiter();
+    mgr.getConnection(waiter1);
+    FakeConnection conn = connector.assertRequest();
+    conn.connect();
+    assertWaitUntil(waiter1::isSuccess);
+    conn.recycle(2L);
+    FakeWaiter waiter2 = new FakeWaiter();
+    // Recycle connection
+    mgr.getConnection(waiter2);
+    // But close it
+    conn.close();
+    // Make sure we get a new connection
+    conn = connector.assertRequest();
+  }
+
+  @Test
   public void testQueueMaxSize() {
     checkQueueMaxSize(2, 3);
     checkQueueMaxSize(0, 3);
