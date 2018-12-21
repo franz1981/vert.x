@@ -292,39 +292,39 @@ public class Pool<C> {
     Holder<C> holder  = new Holder<>();
     ConnectionListener<C> listener = createListener(holder);
     connector.connect(listener, context, ar -> {
+      AsyncResult<C> res;
       if (ar.succeeded()) {
         ConnectResult<C> result = ar.result();
-        // Update state
         synchronized (Pool.this) {
+          // Update state
           initConnection(holder, result.context(), result.concurrency(), result.connection(), result.channel(), result.weight());
-        }
-        // Init connection - state might change (i.e init could close the connection)
-        synchronized (Pool.this) {
+          // Init connection - state might change (i.e init could close the connection)
           if (holder.capacity == 0) {
             waitersQueue.add(waiter);
-            checkPending();
-            return;
+            res = null;
+          } else {
+            waitersCount--;
+            holder.capacity--;
+            if (holder.capacity > 0) {
+              available.add(holder);
+            }
+            connector.activate(holder.connection);
+            res = Future.succeededFuture(holder.connection);
           }
-          waitersCount--;
-          holder.capacity--;
-          if (holder.capacity > 0) {
-            available.add(holder);
-          }
-          connector.activate(holder.connection);
-        }
-        waiter.handler.handle(Future.succeededFuture(holder.connection));
-        synchronized (Pool.this) {
           checkPending();
         }
       } else {
-        waiter.handler.handle(Future.failedFuture(ar.cause()));
         synchronized (Pool.this) {
           waitersCount--;
-          Pool.this.weight -= initialWeight;
+          weight -= initialWeight;
           holder.removed = true;
           checkPending();
           checkClose();
+          res = Future.failedFuture(ar.cause());
         }
+      }
+      if (res != null) {
+        waiter.handler.handle(res);
       }
     });
   }
