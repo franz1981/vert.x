@@ -124,7 +124,7 @@ class ConnectionManager {
             if (metrics != null) {
               metrics.closeEndpoint(host, port, metric);
             }
-            endpointMap.remove(key);
+            endpointMap.remove(key); // Should remove with current endpoint value to avoid races
           },
           connectionMap::put,
           connectionMap::remove,
@@ -133,7 +133,7 @@ class ConnectionManager {
       });
       Object metric;
       if (metrics != null) {
-        metric = metrics.enqueueRequest(endpoint.metric);
+        metric = metrics.enqueueRequest(endpoint.metric); // Metrics might be enqueued several times if getConnection returns false
       } else {
         metric = null;
       }
