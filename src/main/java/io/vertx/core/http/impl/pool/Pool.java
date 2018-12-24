@@ -70,10 +70,8 @@ public class Pool<C> {
 
   /**
    * Pool state associated with a connection.
-   *
-   * @param <C> the connection type
    */
-  public static class Holder<C> {
+  public class Holder implements ConnectionListener<C> {
 
     boolean removed;          // Removed
     C connection;             // The connection instance
@@ -83,6 +81,21 @@ public class Pool<C> {
     ContextInternal context;  // Context associated with the connection
     long weight;              // The weight that participates in the pool weight
     long expirationTimestamp; // The expiration timestamp when (concurrency == capacity) otherwise -1L
+
+    @Override
+    public void onConcurrencyChange(long concurrency) {
+      setConcurrency(this, concurrency);
+    }
+
+    @Override
+    public void onRecycle(long expirationTimestamp) {
+      recycle(this, 1, expirationTimestamp);
+    }
+
+    @Override
+    public void onDiscard() {
+      closed(this);
+    }
 
     @Override
     public String toString() {
@@ -101,7 +114,7 @@ public class Pool<C> {
   private final Queue<Waiter<C>> waitersQueue = new ArrayDeque<>(); // The waiters pending
   private int waitersCount;                                         // The number of waiters (including the inflight waiters not in the queue)
 
-  private final Deque<Holder<C>> available;                         // Available connections
+  private final Deque<Holder> available;                         // Available connections
   private final boolean fifo;                                       // Recycling policy
 
   private final long initialWeight;                                 // The initial weight of a connection
@@ -183,7 +196,7 @@ public class Pool<C> {
    */
   private boolean acquireConnection(Waiter<C> waiter) {
     if (available.size() > 0) {
-      Holder<C> conn = available.peek();
+      Holder conn = available.peek();
       long capacity = conn.capacity--;
       if (capacity == 1) {
         conn.expirationTimestamp = -1L;
@@ -215,8 +228,8 @@ public class Pool<C> {
   public synchronized int closeIdle(long timestamp) {
     int removed = 0;
     if (waitersQueue.isEmpty() && available.size() > 0) {
-      List<Holder<C>> copy = new ArrayList<>(available);
-      for (Holder<C> conn : copy) {
+      List<Holder> copy = new ArrayList<>(available);
+      for (Holder conn : copy) {
         if (conn.capacity == conn.concurrency && conn.expirationTimestamp <= timestamp) {
           removed++;
           closeConnection(conn);
@@ -238,57 +251,9 @@ public class Pool<C> {
     }
   }
 
-  private ConnectionListener<C> createListener(Holder<C> holder) {
-    return new ConnectionListener<C>() {
-      @Override
-      public void onConcurrencyChange(long concurrency) {
-        synchronized (Pool.this) {
-          if (holder.removed) {
-            return;
-          }
-          if (holder.concurrency < concurrency) {
-            long diff = concurrency - holder.concurrency;
-            if (holder.capacity == 0) {
-              available.add(holder);
-            }
-            holder.capacity += diff;
-            holder.concurrency = concurrency;
-            checkPending();
-          } else if (holder.concurrency > concurrency) {
-            throw new UnsupportedOperationException("Not yet implemented");
-          }
-        }
-      }
-
-      @Override
-      public void onRecycle(long expirationTimestamp) {
-        if (expirationTimestamp < 0L) {
-          throw new IllegalArgumentException("Invalid TTL");
-        }
-        synchronized (Pool.this) {
-          if (holder.removed) {
-            return;
-          }
-          recycle(holder, 1, expirationTimestamp);
-        }
-      }
-
-      @Override
-      public void onDiscard() {
-        synchronized (Pool.this) {
-          if (holder.removed) {
-            return;
-          }
-          closed(holder);
-        }
-      }
-    };
-  }
-
   private void createConnection(Waiter<C> waiter) {
-    Holder<C> holder  = new Holder<>();
-    ConnectionListener<C> listener = createListener(holder);
-    connector.connect(listener, context, ar -> {
+    Holder holder  = new Holder();
+    connector.connect(holder, context, ar -> {
       AsyncResult<C> res;
       if (ar.succeeded()) {
         ConnectResult<C> result = ar.result();
@@ -325,19 +290,48 @@ public class Pool<C> {
     });
   }
 
-  private synchronized void recycle(Holder<C> holder, int capacity, long timestamp) {
+  private synchronized void setConcurrency(Holder holder, long concurrency) {
+    if (concurrency < 0L) {
+      throw new IllegalArgumentException("Cannot set a negative concurrency value");
+    }
+    if (holder.removed) {
+      return;
+    }
+    if (holder.concurrency < concurrency) {
+      long diff = concurrency - holder.concurrency;
+      if (holder.capacity == 0) {
+        available.add(holder);
+      }
+      holder.capacity += diff;
+      holder.concurrency = concurrency;
+      checkPending();
+    } else if (holder.concurrency > concurrency) {
+      throw new UnsupportedOperationException("Not yet implemented");
+    }
+  }
+
+  private synchronized void recycle(Holder holder, int capacity, long timestamp) {
+    if (timestamp < 0L) {
+      throw new IllegalArgumentException("Invalid TTL");
+    }
+    if (holder.removed) {
+      return;
+    }
     recycleConnection(holder, capacity, timestamp);
     checkPending();
     checkClose();
   }
 
-  private synchronized void closed(Holder<C> holder) {
+  private synchronized void closed(Holder holder) {
+    if (holder.removed) {
+      return;
+    }
     closeConnection(holder);
     checkPending();
     checkClose();
   }
 
-  private void closeConnection(Holder<C> holder) {
+  private void closeConnection(Holder holder) {
     holder.removed = true;
     connectionRemoved.accept(holder.channel, holder.connection);
     if (holder.capacity > 0) {
@@ -349,7 +343,7 @@ public class Pool<C> {
 
   // These methods assume to be called under synchronization
 
-  private void recycleConnection(Holder<C> conn, int c, long timestamp) {
+  private void recycleConnection(Holder conn, int c, long timestamp) {
     long newCapacity = conn.capacity + c;
     if (newCapacity > conn.concurrency) {
       log.debug("Attempt to recycle a connection more than permitted");
@@ -373,7 +367,7 @@ public class Pool<C> {
     }
   }
 
-  private void initConnection(Holder<C> holder, ContextInternal context, long concurrency, C conn, Channel channel, long weight) {
+  private void initConnection(Holder holder, ContextInternal context, long concurrency, C conn, Channel channel, long weight) {
     this.weight += initialWeight - weight;
     holder.context = context;
     holder.concurrency = concurrency;
