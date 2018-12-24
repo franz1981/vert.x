@@ -78,7 +78,6 @@ public class Pool<C> {
     long concurrency;         // How many times we can borrow from the connection
     long capacity;            // How many times the connection is currently borrowed (0 <= capacity <= concurrency)
     Channel channel;          // Transport channel
-    ContextInternal context;  // Context associated with the connection
     long weight;              // The weight that participates in the pool weight
     long expirationTimestamp; // The expiration timestamp when (concurrency == capacity) otherwise -1L
 
@@ -95,6 +94,16 @@ public class Pool<C> {
     @Override
     public void onDiscard() {
       closed(this);
+    }
+
+    void connect(Waiter waiter) {
+      connector.connect(this, context, ar -> {
+        if (ar.succeeded()) {
+          connectSucceeded(this, waiter, ar.result());
+        } else {
+          connectFailed(this, waiter, ar.cause());
+        }
+      });
     }
 
     @Override
@@ -202,17 +211,15 @@ public class Pool<C> {
         conn.expirationTimestamp = -1L;
         available.poll();
       }
-      ContextInternal ctx = conn.context;
       waitersCount--;
-      ctx.nettyEventLoop().execute(() -> {
+      context.nettyEventLoop().execute(() -> {
         waiter.handler.handle(Future.succeededFuture(conn.connection));
       });
       return true;
     } else if (weight < maxWeight) {
       weight += initialWeight;
-      context.nettyEventLoop().execute(() -> {
-        createConnection(waiter);
-      });
+      Holder holder  = new Holder();
+      context.nettyEventLoop().execute(() -> holder.connect(waiter));
       return true;
     } else {
       return false;
@@ -251,43 +258,41 @@ public class Pool<C> {
     }
   }
 
-  private void createConnection(Waiter<C> waiter) {
-    Holder holder  = new Holder();
-    connector.connect(holder, context, ar -> {
-      AsyncResult<C> res;
-      if (ar.succeeded()) {
-        ConnectResult<C> result = ar.result();
-        synchronized (Pool.this) {
-          // Update state
-          initConnection(holder, result.context(), result.concurrency(), result.connection(), result.channel(), result.weight());
-          // Init connection - state might change (i.e init could close the connection)
-          if (holder.capacity == 0) {
-            waitersQueue.add(waiter);
-            res = null;
-          } else {
-            waitersCount--;
-            holder.capacity--;
-            if (holder.capacity > 0) {
-              available.add(holder);
-            }
-            res = Future.succeededFuture(holder.connection);
-          }
-          checkPending();
-        }
+  private void connectSucceeded(Holder holder, Waiter waiter, ConnectResult<C> result) {
+    AsyncResult<C> res;
+    synchronized (Pool.this) {
+      // Update state
+      initConnection(holder, result.context(), result.concurrency(), result.connection(), result.channel(), result.weight());
+      // Init connection - state might change (i.e init could close the connection)
+      if (holder.capacity == 0) {
+        waitersQueue.add(waiter);
+        res = null;
       } else {
-        synchronized (Pool.this) {
-          waitersCount--;
-          weight -= initialWeight;
-          holder.removed = true;
-          checkPending();
-          checkClose();
-          res = Future.failedFuture(ar.cause());
+        waitersCount--;
+        holder.capacity--;
+        if (holder.capacity > 0) {
+          available.add(holder);
         }
+        res = Future.succeededFuture(holder.connection);
       }
-      if (res != null) {
-        waiter.handler.handle(res);
-      }
-    });
+      checkPending();
+    }
+    if (res != null) {
+      waiter.handler.handle(res);
+    }
+  }
+
+  private void connectFailed(Holder holder, Waiter waiter, Throwable cause) {
+    AsyncResult<C> res;
+    synchronized (Pool.this) {
+      waitersCount--;
+      weight -= initialWeight;
+      holder.removed = true;
+      checkPending();
+      checkClose();
+      res = Future.failedFuture(cause);
+    }
+    waiter.handler.handle(res);
   }
 
   private synchronized void setConcurrency(Holder holder, long concurrency) {
@@ -369,7 +374,6 @@ public class Pool<C> {
 
   private void initConnection(Holder holder, ContextInternal context, long concurrency, C conn, Channel channel, long weight) {
     this.weight += initialWeight - weight;
-    holder.context = context;
     holder.concurrency = concurrency;
     holder.connection = conn;
     holder.channel = channel;
