@@ -883,6 +883,15 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
     }
   }
 
+  protected void handleIdle() {
+    synchronized (this) {
+      if (ws == null && responseInProgress == null) {
+        return;
+      }
+    }
+    super.handleIdle();
+  }
+
   @Override
   protected synchronized void handleException(Throwable e) {
     super.handleException(e);

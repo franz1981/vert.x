@@ -191,9 +191,6 @@ public class Pool<C> {
       }
       ContextInternal ctx = conn.context;
       waitersCount--;
-      if (capacity == conn.concurrency) {
-        connector.activate(conn.connection);
-      }
       ctx.nettyEventLoop().execute(() -> {
         waiter.handler.handle(Future.succeededFuture(conn.connection));
       });
@@ -308,7 +305,6 @@ public class Pool<C> {
             if (holder.capacity > 0) {
               available.add(holder);
             }
-            connector.activate(holder.connection);
             res = Future.succeededFuture(holder.connection);
           }
           checkPending();
@@ -374,9 +370,6 @@ public class Pool<C> {
       }
       conn.expirationTimestamp = timestamp;
       conn.capacity = newCapacity;
-      if (newCapacity == conn.concurrency) {
-        connector.deactivate(conn.connection);
-      }
     }
   }
 

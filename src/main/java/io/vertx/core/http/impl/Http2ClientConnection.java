@@ -466,7 +466,15 @@ class Http2ClientConnection extends Http2ConnectionBase implements HttpClientCon
       return conn.toNetSocket(this);
     }
   }
-  
+
+  @Override
+  protected void handleIdle() {
+    if (streams.isEmpty()) {
+      return;
+    }
+    super.handleIdle();
+  }
+
   public static VertxHttp2ConnectionHandler<Http2ClientConnection> createHttp2ConnectionHandler(
     HttpClientImpl client,
     Object queueMetric,

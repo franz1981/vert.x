@@ -104,22 +104,6 @@ class HttpChannelConnector implements ConnectionProvider<HttpClientConnection> {
     }
   }
 
-  @Override
-  public void activate(HttpClientConnection conn) {
-    if (options.getIdleTimeout() > 0) {
-      ChannelPipeline pipeline = conn.channelHandlerContext().pipeline();
-      pipeline.addFirst("idle", new IdleStateHandler(0, 0, options.getIdleTimeout(), options.getIdleTimeoutUnit()));
-    }
-  }
-
-  @Override
-  public void deactivate(HttpClientConnection conn) {
-    if (options.getIdleTimeout() > 0) {
-      ChannelPipeline pipeline = conn.channelHandlerContext().pipeline();
-      pipeline.remove("idle");
-    }
-  }
-
   private void doConnect(
     ConnectionListener<HttpClientConnection> listener,
     ContextInternal context,
@@ -187,10 +171,15 @@ class HttpChannelConnector implements ConnectionProvider<HttpClientConnection> {
   }
 
   private void applyHttp2ConnectionOptions(ChannelPipeline pipeline) {
-    // No specific options
+    if (options.getIdleTimeout() > 0) {
+      pipeline.addLast("idle", new IdleStateHandler(0, 0, options.getIdleTimeout(), options.getIdleTimeoutUnit()));
+    }
   }
 
   private void applyHttp1xConnectionOptions(ChannelPipeline pipeline) {
+    if (options.getIdleTimeout() > 0) {
+      pipeline.addLast("idle", new IdleStateHandler(0, 0, options.getIdleTimeout(), options.getIdleTimeoutUnit()));
+    }
     if (options.getLogActivity()) {
       pipeline.addLast("logging", new LoggingHandler());
     }

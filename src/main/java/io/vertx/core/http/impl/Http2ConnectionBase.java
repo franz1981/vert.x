@@ -117,6 +117,11 @@ abstract class Http2ConnectionBase extends ConnectionBase implements Http2FrameL
     // Handled by HTTP/2
   }
 
+  @Override
+  protected void handleIdle() {
+    super.handleIdle();
+  }
+
   synchronized boolean isClosed() {
     return closed;
   }

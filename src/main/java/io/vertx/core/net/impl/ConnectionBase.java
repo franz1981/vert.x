@@ -232,6 +232,10 @@ public abstract class ConnectionBase {
     }
   }
 
+  protected void handleIdle() {
+    chctx.close();
+  }
+
   protected abstract void handleInterestedOpsChanged();
 
   protected void addFuture(final Handler<AsyncResult<Void>> completionHandler, final ChannelFuture future) {
