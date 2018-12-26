@@ -89,7 +89,7 @@ public class Pool<C> {
 
     @Override
     public void onRecycle(long expirationTimestamp) {
-      recycle(this, 1, expirationTimestamp);
+      recycle(this, expirationTimestamp);
     }
 
     @Override
@@ -125,8 +125,9 @@ public class Pool<C> {
   private final long maxWaiters;                                    // The max number of inflight waiters
   private int waitersCount;                                         // The number of waiters (including the inflight waiters not in the queue)
 
-  private final Deque<Holder> available;                            // Available connections
+  private final Deque<Holder> available;                            // Available connections, i.e having capacity > 0
   private final boolean fifo;                                       // Recycling policy
+  private long capacity;                                            // The total available connection capacity
 
   private final long initialWeight;                                 // The initial weight of a connection
   private final long maxWeight;                                     // The max weight (equivalent to max pool size)
@@ -172,7 +173,7 @@ public class Pool<C> {
   }
 
   public synchronized long capacity() {
-    return available.stream().mapToLong(c -> c.capacity).sum();
+    return capacity;
   }
 
   /**
@@ -206,10 +207,10 @@ public class Pool<C> {
    * @return wether the waiter is assigned a connection (or a future connection)
    */
   private Consumer<Waiter<C>> acquireConnection() {
-    if (available.size() > 0) {
+    if (capacity > 0) {
       Holder conn = available.peek();
-      long capacity = conn.capacity--;
-      if (capacity == 1) {
+      capacity--;
+      if (--conn.capacity == 0) {
         conn.expirationTimestamp = -1L;
         available.poll();
       }
@@ -232,12 +233,12 @@ public class Pool<C> {
    */
   public synchronized int closeIdle(long timestamp) {
     int removed = 0;
-    if (waitersQueue.isEmpty() && available.size() > 0) {
+    if (waitersQueue.isEmpty() && capacity > 0) {
       List<Holder> copy = new ArrayList<>(available);
       for (Holder conn : copy) {
         if (conn.capacity == conn.concurrency && conn.expirationTimestamp <= timestamp) {
           removed++;
-          closeConnection(conn);
+          closeConnection(conn); // We should actually avoid that
           connector.close(conn.connection);
         }
       }
@@ -294,9 +295,9 @@ public class Pool<C> {
         res = null;
       } else {
         waitersCount--;
-        holder.capacity--;
-        if (holder.capacity > 0) {
+        if (--holder.capacity > 0) {
           available.add(holder);
+          capacity += holder.capacity;
         }
         res = Future.succeededFuture(holder.connection);
       }
@@ -331,6 +332,7 @@ public class Pool<C> {
       if (holder.capacity == 0) {
         available.add(holder);
       }
+      capacity += diff;
       holder.capacity += diff;
       holder.concurrency = concurrency;
       checkProgress();
@@ -339,7 +341,7 @@ public class Pool<C> {
     }
   }
 
-  private void recycle(Holder holder, int capacity, long timestamp) {
+  private void recycle(Holder holder, long timestamp) {
     if (timestamp < 0L) {
       throw new IllegalArgumentException("Invalid TTL");
     }
@@ -348,7 +350,7 @@ public class Pool<C> {
     }
     C toClose;
     synchronized (this) {
-      if (recycleConnection(holder, capacity, timestamp)) {
+      if (recycleConnection(holder, timestamp)) {
         toClose = holder.connection;
       } else {
         toClose = null;
@@ -375,6 +377,7 @@ public class Pool<C> {
     holder.removed = true;
     connectionRemoved.accept(holder.channel, holder.connection);
     if (holder.capacity > 0) {
+      capacity -= holder.capacity;
       available.remove(holder);
       holder.capacity = 0;
     }
@@ -384,26 +387,27 @@ public class Pool<C> {
   // These methods assume to be called under synchronization
 
   /**
-   * Recycle a connection
+   * Recycles a connection.
    *
    * @param holder the connection to recycle
-   * @param capacity the capacity recycled
    * @param timestamp the amount of millis the connection shall remain in the pool
    * @return {@code true} if the connection shall be closed
    */
-  private boolean recycleConnection(Holder holder, int capacity, long timestamp) {
-    long newCapacity = holder.capacity + capacity;
+  private boolean recycleConnection(Holder holder, long timestamp) {
+    long newCapacity = holder.capacity + 1;
     if (newCapacity > holder.concurrency) {
       throw new AssertionError("Attempt to recycle a connection more than permitted");
     }
-    if (timestamp == 0L && newCapacity == holder.concurrency && waitersQueue.isEmpty()) {
+    if (timestamp == 0L && newCapacity == holder.concurrency && capacity >= waitersQueue.size()) {
       if (holder.capacity > 0) {
+        capacity -= holder.capacity;
         available.remove(holder);
       }
       holder.expirationTimestamp = -1L;
       holder.capacity = 0;
       return true;
     } else {
+      capacity++;
       if (holder.capacity == 0) {
         if (fifo) {
           available.addLast(holder);
@@ -412,7 +416,7 @@ public class Pool<C> {
         }
       }
       holder.expirationTimestamp = timestamp;
-      holder.capacity = newCapacity;
+      holder.capacity++;
       return false;
     }
   }

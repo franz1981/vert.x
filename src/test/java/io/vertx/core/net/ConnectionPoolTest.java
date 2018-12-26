@@ -18,6 +18,7 @@ import io.vertx.core.http.impl.pool.*;
 import io.vertx.core.impl.ContextInternal;
 import io.vertx.test.core.Repeat;
 import io.vertx.test.core.VertxTestBase;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.*;
