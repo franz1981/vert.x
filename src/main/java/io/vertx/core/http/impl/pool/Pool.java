@@ -315,16 +315,29 @@ public class Pool<C> {
     }
   }
 
-  private synchronized void recycle(Holder holder, int capacity, long timestamp) {
+  private void recycle(Holder holder, int capacity, long timestamp) {
     if (timestamp < 0L) {
       throw new IllegalArgumentException("Invalid TTL");
     }
     if (holder.removed) {
       return;
     }
-    recycleConnection(holder, capacity, timestamp);
-    checkPending();
-    checkClose();
+    C toClose;
+    synchronized (this) {
+      if (recycleConnection(holder, capacity, timestamp)) {
+        toClose = holder.connection;
+      } else {
+        toClose = null;
+      }
+    }
+    if (toClose != null) {
+      connector.close(holder.connection);
+    } else {
+      synchronized (this) {
+        checkPending();
+        checkClose();
+      }
+    }
   }
 
   private synchronized void closed(Holder holder) {
@@ -348,27 +361,37 @@ public class Pool<C> {
 
   // These methods assume to be called under synchronization
 
-  private void recycleConnection(Holder conn, int c, long timestamp) {
-    long newCapacity = conn.capacity + c;
-    if (newCapacity > conn.concurrency) {
-      log.debug("Attempt to recycle a connection more than permitted");
-      return;
+  /**
+   * Recycle a connection
+   *
+   * @param holder the connection to recycle
+   * @param capacity the capacity recycled
+   * @param timestamp the amount of millis the connection shall remain in the pool
+   * @return {@code true} if the connection shall be closed
+   */
+  private boolean recycleConnection(Holder holder, int capacity, long timestamp) {
+    long newCapacity = holder.capacity + capacity;
+    if (newCapacity > holder.concurrency) {
+      throw new AssertionError("Attempt to recycle a connection more than permitted");
     }
-    if (timestamp == 0L && newCapacity == conn.concurrency && waitersQueue.isEmpty()) {
-      available.remove(conn);
-      conn.expirationTimestamp = -1L;
-      conn.capacity = 0;
-      connector.close(conn.connection);
+    if (timestamp == 0L && newCapacity == holder.concurrency && waitersQueue.isEmpty()) {
+      if (holder.capacity > 0) {
+        available.remove(holder);
+      }
+      holder.expirationTimestamp = -1L;
+      holder.capacity = 0;
+      return true;
     } else {
-      if (conn.capacity == 0) {
+      if (holder.capacity == 0) {
         if (fifo) {
-          available.addLast(conn);
+          available.addLast(holder);
         } else {
-          available.addFirst(conn);
+          available.addFirst(holder);
         }
       }
-      conn.expirationTimestamp = timestamp;
-      conn.capacity = newCapacity;
+      holder.expirationTimestamp = timestamp;
+      holder.capacity = newCapacity;
+      return false;
     }
   }
 

@@ -16,6 +16,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.vertx.core.*;
 import io.vertx.core.http.impl.pool.*;
 import io.vertx.core.impl.ContextInternal;
+import io.vertx.test.core.Repeat;
 import io.vertx.test.core.VertxTestBase;
 import org.junit.Test;
 
@@ -39,6 +40,7 @@ public class ConnectionPoolTest extends VertxTestBase {
     private Pool<FakeConnection> pool;
     private Set<FakeConnection> active = new HashSet<>();
     private boolean closed = true;
+    private int closeCount;
     private int seq;
     private final boolean fifo;
 
@@ -77,6 +79,10 @@ public class ConnectionPoolTest extends VertxTestBase {
       return pool;
     }
 
+    synchronized int closeCount() {
+      return closeCount;
+    }
+
     void getConnection(FakeWaiter waiter) {
       synchronized (this) {
         if (closed) {
@@ -91,6 +97,7 @@ public class ConnectionPoolTest extends VertxTestBase {
             v -> {
               synchronized (FakeConnectionManager.this) {
                 closed = true;
+                closeCount++;
               }
             }, (channel, conn) -> {
             synchronized (FakeConnectionManager.this) {
@@ -551,6 +558,7 @@ public class ConnectionPoolTest extends VertxTestBase {
     }
 
     assertWaitUntil(() -> mgr.closed());
+    assertEquals(1, mgr.closeCount());
 
     // Check state at the end
     assertEquals(0, mgr.size());
