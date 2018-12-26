@@ -35,20 +35,20 @@ public class ConnectionPoolTest extends VertxTestBase {
     private final Context context = vertx.getOrCreateContext();
     private final ConnectionProvider<FakeConnection> connector;
     private final int queueMaxSize;
-    private final int maxPoolSize;
+    private final int poolMaxSize;
     private Pool<FakeConnection> pool;
     private Set<FakeConnection> active = new HashSet<>();
     private boolean closed = true;
     private int seq;
     private final boolean fifo;
 
-    FakeConnectionManager(int queueMaxSize, int maxPoolSize, ConnectionProvider<FakeConnection> connector) {
-      this(queueMaxSize, maxPoolSize, connector, false);
+    FakeConnectionManager(int queueMaxSize, int poolMaxSize, ConnectionProvider<FakeConnection> connector) {
+      this(queueMaxSize, poolMaxSize, connector, false);
     }
 
-    FakeConnectionManager(int queueMaxSize, int maxPoolSize, ConnectionProvider<FakeConnection> connector, boolean fifo) {
+    FakeConnectionManager(int queueMaxSize, int poolMaxSize, ConnectionProvider<FakeConnection> connector, boolean fifo) {
       this.queueMaxSize = queueMaxSize;
-      this.maxPoolSize = maxPoolSize;
+      this.poolMaxSize = poolMaxSize;
       this.connector = connector;
       this.fifo = fifo;
     }
@@ -87,7 +87,7 @@ public class ConnectionPoolTest extends VertxTestBase {
             connector,
             queueMaxSize,
             1,
-            maxPoolSize,
+            poolMaxSize,
             v -> {
               synchronized (FakeConnectionManager.this) {
                 closed = true;
@@ -456,6 +456,29 @@ public class ConnectionPoolTest extends VertxTestBase {
     assertEquals(1, mgr.size());
     assertEquals(1, mgr.removeExpired(2L));
     assertEquals(0, mgr.size());
+  }
+
+  @Test
+  public void testQueueMaxSize() {
+    checkQueueMaxSize(2, 3);
+    checkQueueMaxSize(0, 3);
+  }
+
+  private void checkQueueMaxSize(int queueMaxSize, int poolMaxSize) {
+    FakeConnectionProvider connector = new FakeConnectionProvider();
+    FakeConnectionManager mgr = new FakeConnectionManager(queueMaxSize, poolMaxSize, connector);
+    FakeWaiter[] waiters = new FakeWaiter[poolMaxSize + queueMaxSize];
+    for (int i = 0;i < poolMaxSize + queueMaxSize;i++) {
+      FakeWaiter waiter = new FakeWaiter();
+      waiters[i] = waiter;
+      mgr.getConnection(waiter);
+    }
+    FakeWaiter waiter = new FakeWaiter();
+    mgr.getConnection(waiter);
+    assertWaitUntil(waiter::isFailure);
+    for (int i = 0;i < poolMaxSize + queueMaxSize;i++) {
+      assertFalse("Was not expecting connection no=" + i + " to be failed", waiters[i].isFailure());
+    }
   }
 
   @Test

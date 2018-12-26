@@ -121,9 +121,10 @@ public class Pool<C> {
 
   private final int queueMaxSize;                                   // the queue max size (does not include inflight waiters)
   private final Queue<Waiter<C>> waitersQueue = new ArrayDeque<>(); // The waiters pending
+  private final long maxWaiters;                                    // The max number of inflight waiters
   private int waitersCount;                                         // The number of waiters (including the inflight waiters not in the queue)
 
-  private final Deque<Holder> available;                         // Available connections
+  private final Deque<Holder> available;                            // Available connections
   private final boolean fifo;                                       // Recycling policy
 
   private final long initialWeight;                                 // The initial weight of a connection
@@ -148,6 +149,7 @@ public class Pool<C> {
     this.initialWeight = initialWeight;
     this.connector = connector;
     this.queueMaxSize = queueMaxSize;
+    this.maxWaiters = queueMaxSize == -1 ? -1 : (queueMaxSize + maxWeight / initialWeight);
     this.poolClosed = poolClosed;
     this.available = new ArrayDeque<>();
     this.connectionAdded = connectionAdded;
@@ -182,12 +184,10 @@ public class Pool<C> {
       return false;
     }
     Waiter<C> waiter = new Waiter<>(handler);
-    int size = waitersQueue.size();
-    if (size == 0 && acquireConnection(waiter)) {
-      waitersCount++;
-    } else if (queueMaxSize < 0  || size < queueMaxSize) {
+    if (maxWaiters < 0  || waitersCount < maxWaiters) {
       waitersCount++;
       waitersQueue.add(waiter);
+      checkPending();
     } else {
       context.nettyEventLoop().execute(() -> {
         waiter.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
