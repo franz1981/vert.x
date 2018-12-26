@@ -246,22 +246,25 @@ public class Pool<C> {
     return removed;
   }
 
+  /**
+   * Check whether the pool can make progress toward satisfying the waiters.
+   */
   private void checkProgress() {
     if (checkInProgress) {
       return;
     }
+    // Can we make progress ?
     if (waitersQueue.isEmpty() || (capacity == 0 && weight == maxWeight)) {
       if (weight > 0 || waitersCount > 0) {
         return;
       }
     }
     checkInProgress = true;
+    // Run on context event loop, so the waiters are satisfied on this thread
     context.runOnContext(v -> {
       try {
         checkPending();
-        synchronized (Pool.this) {
-          checkClose();
-        }
+        checkClose();
       } finally {
         synchronized (Pool.this) {
           checkInProgress = false;
@@ -270,14 +273,19 @@ public class Pool<C> {
     });
   }
 
+  /**
+   * Check pending waiters and run progress tasks to satisfy the waiter until
+   */
   private void checkPending() {
     while (true) {
       Waiter<C> waiter;
       Consumer<Waiter<C>> task;
       synchronized (this) {
         if (waitersQueue.size() > 0) {
+          // Acquire a task that will deliver a connection
           task = acquireConnection();
           if (task == null) {
+            // => Can't make more progress
             break;
           }
           waiter = waitersQueue.poll();
@@ -289,7 +297,15 @@ public class Pool<C> {
     }
   }
 
-  private void connectSucceeded(Holder holder, Waiter waiter, ConnectResult<C> result) {
+  private synchronized void checkClose() {
+    if (weight == 0 && waitersCount == 0) {
+      // No waitersQueue and no connections - remove the ConnQueue
+      closed = true;
+      poolClosed.handle(null);
+    }
+  }
+
+  private void connectSucceeded(Holder holder, Waiter<C> waiter, ConnectResult<C> result) {
     AsyncResult<C> res;
     synchronized (Pool.this) {
       // Update state
@@ -313,7 +329,7 @@ public class Pool<C> {
     }
   }
 
-  private void connectFailed(Holder holder, Waiter waiter, Throwable cause) {
+  private void connectFailed(Holder holder, Waiter<C> waiter, Throwable cause) {
     AsyncResult<C> res;
     synchronized (Pool.this) {
       waitersCount--;
@@ -435,13 +451,5 @@ public class Pool<C> {
     holder.capacity = concurrency;
     holder.expirationTimestamp = -1L;
     connectionAdded.accept(holder.channel, holder.connection);
-  }
-
-  private void checkClose() {
-    if (weight == 0 && waitersCount == 0) {
-      // No waitersQueue and no connections - remove the ConnQueue
-      closed = true;
-      poolClosed.handle(null);
-    }
   }
 }
