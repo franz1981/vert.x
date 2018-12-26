@@ -23,6 +23,7 @@ import io.vertx.core.logging.LoggerFactory;
 
 import java.util.*;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * The pool is a queue of waiters and a list of connections.
@@ -131,6 +132,7 @@ public class Pool<C> {
   private final long maxWeight;                                     // The max weight (equivalent to max pool size)
   private long weight;                                              // The actual pool weight (equivalent to connection count)
 
+  private boolean checkInProgress;                                  //
   private boolean closed;
   private final Handler<Void> poolClosed;
 
@@ -187,7 +189,7 @@ public class Pool<C> {
     if (maxWaiters < 0  || waitersCount < maxWaiters) {
       waitersCount++;
       waitersQueue.add(waiter);
-      checkPending();
+      checkProgress();
     } else {
       context.nettyEventLoop().execute(() -> {
         waiter.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
@@ -203,7 +205,7 @@ public class Pool<C> {
    *
    * @return wether the waiter is assigned a connection (or a future connection)
    */
-  private boolean acquireConnection(Waiter<C> waiter) {
+  private Consumer<Waiter<C>> acquireConnection() {
     if (available.size() > 0) {
       Holder conn = available.peek();
       long capacity = conn.capacity--;
@@ -212,17 +214,13 @@ public class Pool<C> {
         available.poll();
       }
       waitersCount--;
-      context.nettyEventLoop().execute(() -> {
-        waiter.handler.handle(Future.succeededFuture(conn.connection));
-      });
-      return true;
+      return waiter -> waiter.handler.handle(Future.succeededFuture(conn.connection));
     } else if (weight < maxWeight) {
       weight += initialWeight;
       Holder holder  = new Holder();
-      context.nettyEventLoop().execute(() -> holder.connect(waiter));
-      return true;
+      return holder::connect;
     } else {
-      return false;
+      return null;
     }
   }
 
@@ -247,14 +245,41 @@ public class Pool<C> {
     return removed;
   }
 
-  private void checkPending() {
-    while (waitersQueue.size() > 0) {
-      Waiter<C> waiter = waitersQueue.peek();
-      if (acquireConnection(waiter)) {
-        waitersQueue.poll();
-      } else {
-        break;
+  private void checkProgress() {
+    if (checkInProgress) {
+      return;
+    }
+    checkInProgress = true;
+    context.runOnContext(v -> {
+      try {
+        checkPending();
+        synchronized (Pool.this) {
+          checkClose();
+        }
+      } finally {
+        synchronized (Pool.this) {
+          checkInProgress = false;
+        }
       }
+    });
+  }
+
+  private void checkPending() {
+    while (true) {
+      Waiter<C> waiter;
+      Consumer<Waiter<C>> task;
+      synchronized (this) {
+        if (waitersQueue.size() > 0) {
+          task = acquireConnection();
+          if (task == null) {
+            break;
+          }
+          waiter = waitersQueue.poll();
+        } else {
+          break;
+        }
+      }
+      task.accept(waiter);
     }
   }
 
@@ -275,7 +300,7 @@ public class Pool<C> {
         }
         res = Future.succeededFuture(holder.connection);
       }
-      checkPending();
+      checkProgress();
     }
     if (res != null) {
       waiter.handler.handle(res);
@@ -288,8 +313,7 @@ public class Pool<C> {
       waitersCount--;
       weight -= initialWeight;
       holder.removed = true;
-      checkPending();
-      checkClose();
+      checkProgress();
       res = Future.failedFuture(cause);
     }
     waiter.handler.handle(res);
@@ -309,7 +333,7 @@ public class Pool<C> {
       }
       holder.capacity += diff;
       holder.concurrency = concurrency;
-      checkPending();
+      checkProgress();
     } else if (holder.concurrency > concurrency) {
       throw new UnsupportedOperationException("Not yet implemented");
     }
@@ -334,8 +358,7 @@ public class Pool<C> {
       connector.close(holder.connection);
     } else {
       synchronized (this) {
-        checkPending();
-        checkClose();
+        checkProgress();
       }
     }
   }
@@ -345,8 +368,7 @@ public class Pool<C> {
       return;
     }
     closeConnection(holder);
-    checkPending();
-    checkClose();
+    checkProgress();
   }
 
   private void closeConnection(Holder holder) {
