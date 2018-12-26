@@ -250,6 +250,11 @@ public class Pool<C> {
     if (checkInProgress) {
       return;
     }
+    if (waitersQueue.isEmpty() || (capacity == 0 && weight == maxWeight)) {
+      if (weight > 0 || waitersCount > 0) {
+        return;
+      }
+    }
     checkInProgress = true;
     context.runOnContext(v -> {
       try {
