@@ -97,12 +97,12 @@ public class Pool<C> {
       closed(this);
     }
 
-    void connect(Waiter waiter) {
+    void connect() {
       connector.connect(this, context, ar -> {
         if (ar.succeeded()) {
-          connectSucceeded(this, waiter, ar.result());
+          connectSucceeded(this, ar.result());
         } else {
-          connectFailed(this, waiter, ar.cause());
+          connectFailed(this, ar.cause());
         }
       });
     }
@@ -122,11 +122,11 @@ public class Pool<C> {
 
   private final int queueMaxSize;                                   // the queue max size (does not include inflight waiters)
   private final Deque<Waiter<C>> waitersQueue = new ArrayDeque<>(); // The waiters pending
-  private int waitersCount;                                         // The number of waiters (including the inflight waiters not in the queue)
 
   private final Deque<Holder> available;                            // Available connections, i.e having capacity > 0
   private final boolean fifo;                                       // Recycling policy
   private long capacity;                                            // The total available connection capacity
+  private long connecting;                                          // The number of connections in progress
 
   private final long initialWeight;                                 // The initial weight of a connection
   private final long maxWeight;                                     // The max weight (equivalent to max pool size)
@@ -162,10 +162,6 @@ public class Pool<C> {
     return waitersQueue.size();
   }
 
-  public synchronized int waitersCount() {
-    return waitersCount;
-  }
-
   public synchronized long weight() {
     return weight;
   }
@@ -185,36 +181,9 @@ public class Pool<C> {
       return false;
     }
     Waiter<C> waiter = new Waiter<>(handler);
-    waitersCount++;
     waitersQueue.add(waiter);
     checkProgress();
     return true;
-  }
-
-  /**
-   * Attempt to acquire a connection for the waiter, either borrowed from the pool or by creating a new connection.
-   *
-   * This method does not modify the waitersQueue list.
-   *
-   * @return wether the waiter is assigned a connection (or a future connection)
-   */
-  private Consumer<Waiter<C>> acquireConnection() {
-    if (capacity > 0) {
-      Holder conn = available.peek();
-      capacity--;
-      if (--conn.capacity == 0) {
-        conn.expirationTimestamp = -1L;
-        available.poll();
-      }
-      waitersCount--;
-      return waiter -> waiter.handler.handle(Future.succeededFuture(conn.connection));
-    } else if (weight < maxWeight) {
-      weight += initialWeight;
-      Holder holder  = new Holder();
-      return holder::connect;
-    } else {
-      return null;
-    }
   }
 
   /**
@@ -247,13 +216,13 @@ public class Pool<C> {
     }
     // Can we make progress ?
     if (waitersQueue.isEmpty() || (capacity == 0 && weight == maxWeight && waitersQueue.size() <= queueMaxSize)) {
-      if (weight > 0 || waitersCount > 0) {
+      if (weight > 0 || waitersQueue.size() > 0) {
         return;
       }
     }
     checkInProgress = true;
     // Run on context event loop, so the waiters are satisfied on this thread
-    context.runOnContext(v -> {
+    context.nettyEventLoop().execute(() -> {
       try {
         checkPending();
         checkClose();
@@ -270,18 +239,27 @@ public class Pool<C> {
    */
   private void checkPending() {
     while (true) {
-      Waiter<C> waiter;
-      Consumer<Waiter<C>> task;
+      Runnable task;
       synchronized (this) {
         if (waitersQueue.size() > 0) {
           // Acquire a task that will deliver a connection
-          task = acquireConnection();
-          if (task != null) {
-            waiter = waitersQueue.poll();
-          } else if (queueMaxSize >= 0 && waitersQueue.size() > queueMaxSize) {
-            task = w -> w.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
-            waiter = waitersQueue.removeLast();
-            waitersCount--;
+          if (capacity > 0) {
+            Holder conn = available.peek();
+            capacity--;
+            if (--conn.capacity == 0) {
+              conn.expirationTimestamp = -1L;
+              available.poll();
+            }
+            Waiter<C> waiter = waitersQueue.poll();
+            task = () -> waiter.handler.handle(Future.succeededFuture(conn.connection));
+          } else if (weight < maxWeight && (waitersQueue.size() - connecting) > 0) {
+            connecting++;
+            weight += initialWeight;
+            Holder holder  = new Holder();
+            task = holder::connect;
+          } else if (queueMaxSize >= 0 && (waitersQueue.size() - connecting) > queueMaxSize) {
+            Waiter<C> waiter = waitersQueue.removeLast();
+            task = () -> waiter.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
           } else {
             // => Can't make more progress
             break;
@@ -290,53 +268,55 @@ public class Pool<C> {
           break;
         }
       }
-
-      task.accept(waiter);
+      task.run();
     }
   }
 
   private synchronized void checkClose() {
-    if (weight == 0 && waitersCount == 0) {
+    if (weight == 0 && waitersQueue.isEmpty()) {
       // No waitersQueue and no connections - remove the ConnQueue
       closed = true;
       poolClosed.handle(null);
     }
   }
 
-  private void connectSucceeded(Holder holder, Waiter<C> waiter, ConnectResult<C> result) {
-    AsyncResult<C> res;
+  private void connectSucceeded(Holder holder, ConnectResult<C> result) {
+    List<Waiter<C>> waiters;
     synchronized (Pool.this) {
+      connecting--;
+      weight += initialWeight - result.weight();
       // Update state
       initConnection(holder, result.context(), result.concurrency(), result.connection(), result.channel(), result.weight());
       // Init connection - state might change (i.e init could close the connection)
-      if (holder.capacity == 0) {
-        waitersQueue.add(waiter);
-        res = null;
-      } else {
-        waitersCount--;
-        if (--holder.capacity > 0) {
-          available.add(holder);
-          capacity += holder.capacity;
-        }
-        res = Future.succeededFuture(holder.connection);
+      waiters = new ArrayList<>();
+      while (holder.capacity > 0 && waitersQueue.size() > 0) {
+        waiters.add(waitersQueue.poll());
+        holder.capacity--;
+      }
+      if (holder.capacity > 0) {
+        available.add(holder);
+        capacity += holder.capacity;
       }
       checkProgress();
     }
-    if (res != null) {
-      waiter.handler.handle(res);
+    connectionAdded.accept(holder.channel, holder.connection);
+    for (Waiter<C> waiter : waiters) {
+      waiter.handler.handle(Future.succeededFuture(holder.connection));
     }
   }
 
-  private void connectFailed(Holder holder, Waiter<C> waiter, Throwable cause) {
-    AsyncResult<C> res;
+  private void connectFailed(Holder holder, Throwable cause) {
+    Waiter<C> waiter;
     synchronized (Pool.this) {
-      waitersCount--;
+      connecting--;
+      waiter = waitersQueue.poll();
       weight -= initialWeight;
       holder.removed = true;
       checkProgress();
-      res = Future.failedFuture(cause);
     }
-    waiter.handler.handle(res);
+    if (waiter != null) {
+      waiter.handler.handle(Future.failedFuture(cause));
+    }
   }
 
   private synchronized void setConcurrency(Holder holder, long concurrency) {
@@ -441,13 +421,11 @@ public class Pool<C> {
   }
 
   private void initConnection(Holder holder, ContextInternal context, long concurrency, C conn, Channel channel, long weight) {
-    this.weight += initialWeight - weight;
     holder.concurrency = concurrency;
     holder.connection = conn;
     holder.channel = channel;
     holder.weight = weight;
     holder.capacity = concurrency;
     holder.expirationTimestamp = -1L;
-    connectionAdded.accept(holder.channel, holder.connection);
   }
 }

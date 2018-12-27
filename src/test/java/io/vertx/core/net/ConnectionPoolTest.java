@@ -581,7 +581,6 @@ public class ConnectionPoolTest extends VertxTestBase {
 
     // Check state at the end
     assertEquals(0, mgr.size());
-    assertEquals(0, mgr.pool.waitersCount());
     assertEquals(0, mgr.pool.waitersInQueue());
     assertEquals(0, mgr.pool.weight());
     assertEquals(0, mgr.pool.capacity());
