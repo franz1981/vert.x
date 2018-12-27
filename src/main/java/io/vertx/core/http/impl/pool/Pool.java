@@ -121,8 +121,7 @@ public class Pool<C> {
   private final BiConsumer<Channel, C> connectionRemoved;
 
   private final int queueMaxSize;                                   // the queue max size (does not include inflight waiters)
-  private final Queue<Waiter<C>> waitersQueue = new ArrayDeque<>(); // The waiters pending
-  private final long maxWaiters;                                    // The max number of inflight waiters
+  private final Deque<Waiter<C>> waitersQueue = new ArrayDeque<>(); // The waiters pending
   private int waitersCount;                                         // The number of waiters (including the inflight waiters not in the queue)
 
   private final Deque<Holder> available;                            // Available connections, i.e having capacity > 0
@@ -152,7 +151,6 @@ public class Pool<C> {
     this.initialWeight = initialWeight;
     this.connector = connector;
     this.queueMaxSize = queueMaxSize;
-    this.maxWaiters = queueMaxSize == -1 ? -1 : (queueMaxSize + maxWeight / initialWeight);
     this.poolClosed = poolClosed;
     this.available = new ArrayDeque<>();
     this.connectionAdded = connectionAdded;
@@ -187,15 +185,9 @@ public class Pool<C> {
       return false;
     }
     Waiter<C> waiter = new Waiter<>(handler);
-    if (maxWaiters < 0  || waitersCount < maxWaiters) {
-      waitersCount++;
-      waitersQueue.add(waiter);
-      checkProgress();
-    } else {
-      context.nettyEventLoop().execute(() -> {
-        waiter.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
-      });
-    }
+    waitersCount++;
+    waitersQueue.add(waiter);
+    checkProgress();
     return true;
   }
 
@@ -254,7 +246,7 @@ public class Pool<C> {
       return;
     }
     // Can we make progress ?
-    if (waitersQueue.isEmpty() || (capacity == 0 && weight == maxWeight)) {
+    if (waitersQueue.isEmpty() || (capacity == 0 && weight == maxWeight && waitersQueue.size() <= queueMaxSize)) {
       if (weight > 0 || waitersCount > 0) {
         return;
       }
@@ -284,15 +276,21 @@ public class Pool<C> {
         if (waitersQueue.size() > 0) {
           // Acquire a task that will deliver a connection
           task = acquireConnection();
-          if (task == null) {
+          if (task != null) {
+            waiter = waitersQueue.poll();
+          } else if (queueMaxSize >= 0 && waitersQueue.size() > queueMaxSize) {
+            task = w -> w.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
+            waiter = waitersQueue.removeLast();
+            waitersCount--;
+          } else {
             // => Can't make more progress
             break;
           }
-          waiter = waitersQueue.poll();
         } else {
           break;
         }
       }
+
       task.accept(waiter);
     }
   }
