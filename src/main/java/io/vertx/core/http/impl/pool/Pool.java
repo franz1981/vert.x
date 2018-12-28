@@ -25,43 +25,58 @@ import java.util.*;
 import java.util.function.BiConsumer;
 
 /**
- * The pool is a queue of waiters and a list of connections.
+ * The pool is a state machine that maintains a queue of waiters and a list of available connections.
+ * <p/>
+ * Interactions with the pool modifies the pool state and then the pool will run tasks to make progress satisfying
+ * the pool requests.
+ * <p/>
+ * The pool maintains a few invariants:
+ * <ul>
+ *   <li>a connection in the {@link #available} set has its {@link Holder#capacity}{@code > 0}</li>
+ *   <li>{@link #weight} is the sum of all connection's {@link Holder#weight}</li>
+ *   <li>{@link #capacity} is the sum of all connection's {@link Holder#capacity}</li>
+ *   <li>{@link #connecting} is the number of the connections connecting but not yet connected</li>
+ * </ul>
  *
- * Pool invariants:
- * - a connection in the {@link #available} list has its {@code Holder#capacity > 0}
- * - the {@link #weight} is the sum of all inflight connections {@link Holder#weight}
- *
- * A connection is delivered to a {@link Waiter} on the connection's event loop thread, the waiter must take care of
+ * A connection is delivered to a {@link Waiter} on the pool's context event loop thread, the waiter must take care of
  * calling {@link io.vertx.core.impl.ContextInternal#executeFromIO} if necessary.
- *
+ * <p/>
  * Calls to the pool are synchronized on the pool to avoid race conditions and maintain its invariants. This pool can
  * be called from different threads safely (although it is not encouraged for performance reasons, we benefit from biased
  * locking which makes the overhead of synchronized near zero), since it synchronizes on the pool.
  *
- * In order to avoid deadlocks, acquisition events (success or failure) are dispatched on the event loop thread of the
- * connection without holding the pool lock.
- *
- * To constrain the number of connections the pool maintains a {@link #weight} value that must remain below the the
- * {@link #maxWeight} value to create a connection. Weight is used instead of counting connection because this pool
+ * <h3>Pool weight</h3>
+ * To constrain the number of connections the pool maintains a {@link #weight} field that must remain lesser than
+ * {@link #maxWeight} to create a connection. Such weight is used instead of counting connection because the pool
  * can mix connections with different concurrency (HTTP/1 and HTTP/2) and this flexibility is necessary.
- *
+ * <p/>
  * When a connection is created an {@link #initialWeight} is added to the current weight.
  * When the channel is connected the {@link ConnectResult} callback value provides actual connection weight so it
  * can be used to correct the pool weight. When the channel fails to connect the initial weight is used
  * to correct the pool weight.
  *
+ * <h3>Recycling a connection</h3>
  * When a connection is recycled and reaches its full capacity (i.e {@code Holder#concurrency == Holder#capacity},
  * the behavior depends on the {@link ConnectionListener#onRecycle(long)} event that releases this connection.
  * When {@code expirationTimestamp} is {@code 0L} the connection is closed, otherwise it is maintained in the pool,
  * letting the borrower define the expiration timestamp. The value is set according to the HTTP client connection
  * keep alive timeout.
  *
- * When a waiter asks for a connection, it is either added to the queue (when it's not empty) or attempted to be
- * served (from the pool or by creating a new connection) or failed. The {@link #waitersCount} is the number
- * of total waiters (the waiters in {@link #waitersQueue} but also the inflight) so we know if we can close the pool
- * or not. The {@link #waitersCount} is incremented when a waiter wants to acquire a connection succesfully (i.e
- * it is either added to the queue or served from the pool) and decremented when the it gets a reply (either with
- * a connection or with a failure).
+ * <h3>Acquiring a connection</h3>
+ * When a waiter wants to acquire a connection it is either added to the {@link #waitersQueue} and the request
+ * will be handled by the pool asynchronously.
+ * <ul>
+ *   <li>when there is an available pooled connection, this connection is delivered to the waiter and it is removed
+ *   from the queue</li>
+ *   <li>when there is no available connection a connection is created when {@link #weight}{@code <}{@link #maxWeight}</li>
+ *   <li>when the max number of waiters is reached, the request is failed</li>
+ *   <li>otherwise the waiter remains in the queue until progress can be done (i.e a connection is recycled, etc...)</li>
+ * </ul>
+ * When a waiter is satisfied, to avoid races the waiter is guaranteed to read the correct connection state.
+ *
+ * <h3>Pool progress</h3>
+ * When the pool state is modified, an asynchronous task is executed to make the pool state progress. The pool ensures
+ * that a single progress task is executed with the {@link #checkInProgress} flag.
  *
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  * @author <a href="http://tfox.org">Tim Fox</a>
@@ -80,6 +95,15 @@ public class Pool<C> {
     Channel channel;          // Transport channel
     long weight;              // The weight that participates in the pool weight
     long expirationTimestamp; // The expiration timestamp when (concurrency == capacity) otherwise -1L
+
+    private void init(long concurrency, C conn, Channel channel, long weight) {
+      this.concurrency = concurrency;
+      this.connection = conn;
+      this.channel = channel;
+      this.weight = weight;
+      this.capacity = concurrency;
+      this.expirationTimestamp = -1L;
+    }
 
     @Override
     public void onConcurrencyChange(long concurrency) {
@@ -134,7 +158,6 @@ public class Pool<C> {
   private boolean checkInProgress;                                  //
   private boolean closed;
   private final Handler<Void> poolClosed;
-
 
   public Pool(Context context,
               ConnectionProvider<C> connector,
@@ -275,14 +298,15 @@ public class Pool<C> {
     }
   }
 
+  /**
+   * Handle connect success, a number of waiters will be satisfied according to the connection's concurrency.
+   */
   private void connectSucceeded(Holder holder, ConnectResult<C> result) {
     List<Waiter<C>> waiters;
     synchronized (Pool.this) {
       connecting--;
       weight += initialWeight - result.weight();
-      // Update state
-      initConnection(holder, result.context(), result.concurrency(), result.connection(), result.channel(), result.weight());
-      // Init connection - state might change (i.e init could close the connection)
+      holder.init(result.concurrency(), result.connection(), result.channel(), result.weight());
       waiters = new ArrayList<>();
       while (holder.capacity > 0 && waitersQueue.size() > 0) {
         waiters.add(waitersQueue.poll());
@@ -300,6 +324,9 @@ public class Pool<C> {
     }
   }
 
+  /**
+   * Handle connect failures, the first waiter is always failed to avoid infinite reconnection.
+   */
   private void connectFailed(Holder holder, Throwable cause) {
     Waiter<C> waiter;
     synchronized (Pool.this) {
@@ -413,14 +440,5 @@ public class Pool<C> {
       holder.capacity++;
       return false;
     }
-  }
-
-  private void initConnection(Holder holder, ContextInternal context, long concurrency, C conn, Channel channel, long weight) {
-    holder.concurrency = concurrency;
-    holder.connection = conn;
-    holder.channel = channel;
-    holder.weight = weight;
-    holder.capacity = concurrency;
-    holder.expirationTimestamp = -1L;
   }
 }
