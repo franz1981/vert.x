@@ -644,9 +644,10 @@ class Http1xClientConnection extends Http1xConnectionBase implements HttpClientC
     synchronized (this) {
       stream = responseInProgress;
       // We don't signal response end for a 100-continue response as a real response will follow
-      if (stream.response == null || stream.response.statusCode() != 100) {
-        responseInProgress = responseInProgress.next;
+      if (stream.response.statusCode() == 100) {
+        return;
       }
+      responseInProgress = stream.next;
     }
     if (stream.endResponse(trailer)) {
       checkLifecycle();

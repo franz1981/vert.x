@@ -59,15 +59,21 @@ class Http2ClientConnection extends Http2ConnectionBase implements HttpClientCon
   }
 
   @Override
-  synchronized void onGoAwaySent(int lastStreamId, long errorCode, ByteBuf debugData) {
-    listener.onDiscard();
-    super.onGoAwaySent(lastStreamId, errorCode, debugData);
+  synchronized boolean onGoAwaySent(int lastStreamId, long errorCode, ByteBuf debugData) {
+    boolean goneAway = super.onGoAwaySent(lastStreamId, errorCode, debugData);
+    if (goneAway) {
+      listener.onDiscard();
+    }
+    return goneAway;
   }
 
   @Override
-  synchronized void onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
-    listener.onDiscard();
-    super.onGoAwayReceived(lastStreamId, errorCode, debugData);
+  synchronized boolean onGoAwayReceived(int lastStreamId, long errorCode, ByteBuf debugData) {
+    boolean goneAway = super.onGoAwayReceived(lastStreamId, errorCode, debugData);
+    if (goneAway) {
+      listener.onDiscard();
+    }
+    return goneAway;
   }
 
   @Override

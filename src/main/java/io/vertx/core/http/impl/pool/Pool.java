@@ -78,6 +78,7 @@ import java.util.function.BiConsumer;
  * When the pool state is modified, an asynchronous task is executed to make the pool state progress. The pool ensures
  * that a single progress task is executed with the {@link #checkInProgress} flag.
  *
+ *
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
@@ -215,18 +216,21 @@ public class Pool<C> {
    * @return the number of closed connections when calling this method
    */
   public synchronized int closeIdle(long timestamp) {
-    int removed = 0;
-    if (waitersQueue.isEmpty() && capacity > 0) {
-      List<Holder> copy = new ArrayList<>(available);
-      for (Holder conn : copy) {
-        if (conn.capacity == conn.concurrency && conn.expirationTimestamp <= timestamp) {
-          removed++;
-          closeConnection(conn); // We should actually avoid that
-          connector.close(conn.connection);
+    List<C> toClose = new ArrayList<>();
+    synchronized (this) {
+      if (waitersQueue.isEmpty() && capacity > 0) {
+        for (Holder holder : new ArrayList<>(available)) {
+          if (holder.capacity == holder.concurrency && holder.expirationTimestamp <= timestamp && !holder.removed) {
+            toClose.add(holder.connection);
+            closeConnection(holder);
+          }
         }
       }
     }
-    return removed;
+    for (C conn : toClose) {
+      connector.close(conn);
+    }
+    return toClose.size();
   }
 
   /**
@@ -346,6 +350,7 @@ public class Pool<C> {
       throw new IllegalArgumentException("Cannot set a negative concurrency value");
     }
     if (holder.removed) {
+      assert false : "Cannot recycle removed holder";
       return;
     }
     if (holder.concurrency < concurrency) {
