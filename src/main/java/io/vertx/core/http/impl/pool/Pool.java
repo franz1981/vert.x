@@ -23,7 +23,6 @@ import io.vertx.core.logging.LoggerFactory;
 
 import java.util.*;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 /**
  * The pool is a queue of waiters and a list of connections.
@@ -221,50 +220,21 @@ public class Pool<C> {
       }
     }
     checkInProgress = true;
-    // Run on context event loop, so the waiters are satisfied on this thread
-    context.nettyEventLoop().execute(() -> {
-      try {
-        checkPending();
-        checkClose();
-      } finally {
-        synchronized (Pool.this) {
-          checkInProgress = false;
-        }
-      }
-    });
+    context.nettyEventLoop().execute(this::checkPendingTasks);
   }
 
   /**
-   * Check pending waiters and run progress tasks to satisfy the waiter until
+   * Run pending progress tasks.
    */
-  private void checkPending() {
+  private void checkPendingTasks() {
     while (true) {
       Runnable task;
       synchronized (this) {
-        if (waitersQueue.size() > 0) {
-          // Acquire a task that will deliver a connection
-          if (capacity > 0) {
-            Holder conn = available.peek();
-            capacity--;
-            if (--conn.capacity == 0) {
-              conn.expirationTimestamp = -1L;
-              available.poll();
-            }
-            Waiter<C> waiter = waitersQueue.poll();
-            task = () -> waiter.handler.handle(Future.succeededFuture(conn.connection));
-          } else if (weight < maxWeight && (waitersQueue.size() - connecting) > 0) {
-            connecting++;
-            weight += initialWeight;
-            Holder holder  = new Holder();
-            task = holder::connect;
-          } else if (queueMaxSize >= 0 && (waitersQueue.size() - connecting) > queueMaxSize) {
-            Waiter<C> waiter = waitersQueue.removeLast();
-            task = () -> waiter.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
-          } else {
-            // => Can't make more progress
-            break;
-          }
-        } else {
+        task = nextTask();
+        if (task == null) {
+          // => Can't make more progress
+          checkInProgress = false;
+          checkClose();
           break;
         }
       }
@@ -272,7 +242,32 @@ public class Pool<C> {
     }
   }
 
-  private synchronized void checkClose() {
+  private Runnable nextTask() {
+    if (waitersQueue.size() > 0) {
+      // Acquire a task that will deliver a connection
+      if (capacity > 0) {
+        Holder conn = available.peek();
+        capacity--;
+        if (--conn.capacity == 0) {
+          conn.expirationTimestamp = -1L;
+          available.poll();
+        }
+        Waiter<C> waiter = waitersQueue.poll();
+        return () -> waiter.handler.handle(Future.succeededFuture(conn.connection));
+      } else if (weight < maxWeight && (waitersQueue.size() - connecting) > 0) {
+        connecting++;
+        weight += initialWeight;
+        Holder holder  = new Holder();
+        return holder::connect;
+      } else if (queueMaxSize >= 0 && (waitersQueue.size() - connecting) > queueMaxSize) {
+        Waiter<C> waiter = waitersQueue.removeLast();
+        return () -> waiter.handler.handle(Future.failedFuture(new ConnectionPoolTooBusyException("Connection pool reached max wait queue size of " + queueMaxSize)));
+      }
+    }
+    return null;
+  }
+
+  private void checkClose() {
     if (weight == 0 && waitersQueue.isEmpty()) {
       // No waitersQueue and no connections - remove the ConnQueue
       closed = true;
