@@ -134,6 +134,11 @@ import java.time.format.DateTimeFormatter;
             obj.setQuorumSize(((Number)member.getValue()).intValue());
           }
           break;
+        case "tracingOptions":
+          if (member.getValue() instanceof JsonObject) {
+            obj.setTracingOptions(new io.vertx.core.tracing.TracingOptions((JsonObject)member.getValue()));
+          }
+          break;
         case "warningExceptionTime":
           if (member.getValue() instanceof Number) {
             obj.setWarningExceptionTime(((Number)member.getValue()).longValue());
@@ -202,6 +207,9 @@ import java.time.format.DateTimeFormatter;
     }
     json.put("preferNativeTransport", obj.getPreferNativeTransport());
     json.put("quorumSize", obj.getQuorumSize());
+    if (obj.getTracingOptions() != null) {
+      json.put("tracingOptions", obj.getTracingOptions().toJson());
+    }
     json.put("warningExceptionTime", obj.getWarningExceptionTime());
     if (obj.getWarningExceptionTimeUnit() != null) {
       json.put("warningExceptionTimeUnit", obj.getWarningExceptionTimeUnit().name());
