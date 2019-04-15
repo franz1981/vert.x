@@ -64,9 +64,10 @@ public final class VertxHandler<C extends ConnectionBase> extends ChannelDuplexH
   private final Function<ChannelHandlerContext, C> connectionFactory;
   private final ContextInternal context;
   private C conn;
+  private Handler<Void> endReadAndFlush;
   private Handler<C> addHandler;
   private Handler<C> removeHandler;
-  private Handler<Object> messageHandler;
+  private Handler<Object> readHandler;
 
   private VertxHandler(ContextInternal context, Function<ChannelHandlerContext, C> connectionFactory) {
     this.context = context;
@@ -80,7 +81,8 @@ public final class VertxHandler<C extends ConnectionBase> extends ChannelDuplexH
    */
   private void setConnection(C connection) {
     conn = connection;
-    messageHandler = ((ConnectionBase)conn)::handleMessage; // Dubious cast to make compiler happy
+    endReadAndFlush = v -> conn.endReadAndFlush();
+    readHandler = ((ConnectionBase)conn)::handleRead; // Dubious cast to make compiler happy
     if (addHandler != null) {
       addHandler.handle(connection);
     }
@@ -93,7 +95,7 @@ public final class VertxHandler<C extends ConnectionBase> extends ChannelDuplexH
    * @param error the {@code Throwable} to propagate
    */
   void fail(Throwable error) {
-    messageHandler = NULL_HANDLER;
+    readHandler = NULL_HANDLER;
     conn.chctx.pipeline().fireExceptionCaught(error);
   }
 
@@ -164,13 +166,12 @@ public final class VertxHandler<C extends ConnectionBase> extends ChannelDuplexH
 
   @Override
   public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
-    conn.endReadAndFlush();
+    context.executeFromIO(endReadAndFlush);
   }
 
   @Override
   public void channelRead(ChannelHandlerContext chctx, Object msg) throws Exception {
-    conn.setRead();
-    context.schedule(msg, messageHandler);
+    context.schedule(msg, readHandler);
   }
 
   @Override
