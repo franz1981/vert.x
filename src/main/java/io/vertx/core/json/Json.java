@@ -293,68 +293,75 @@ public class Json {
     }
   }
 
-  private static Object decodeJsonInternal(JsonParser parser) throws DecodeException {
-    try {
-      // Check if root object is a primitive or not
-      switch (parser.getCurrentTokenId()) {
-        case JsonTokenId.ID_START_OBJECT:
-          return decodeObject(parser);
-        case JsonTokenId.ID_START_ARRAY:
-          return decodeArray(parser);
-        case JsonTokenId.ID_STRING:
-          return parser.getText();
-        case JsonTokenId.ID_NUMBER_FLOAT:
-        case JsonTokenId.ID_NUMBER_INT:
-          return parser.getNumberValue();
-        case JsonTokenId.ID_TRUE:
-          return Boolean.TRUE;
-        case JsonTokenId.ID_FALSE:
-          return Boolean.FALSE;
-        case JsonTokenId.ID_NULL:
-          return null;
-        default:
-          throw DecodeException.create("Unexpected token", parser.getCurrentLocation());
-      }
-    } catch (IOException e) {
-      throw new DecodeException(e);
+  private static Object decodeJsonInternal(JsonParser parser) throws IOException, DecodeException {
+    // Check if root object is a primitive or not
+    switch (parser.getCurrentTokenId()) {
+      case JsonTokenId.ID_START_OBJECT:
+        return decodeObject(parser);
+      case JsonTokenId.ID_START_ARRAY:
+        return decodeArray(parser);
+      case JsonTokenId.ID_STRING:
+        return parser.getText();
+      case JsonTokenId.ID_NUMBER_FLOAT:
+      case JsonTokenId.ID_NUMBER_INT:
+        return parser.getNumberValue();
+      case JsonTokenId.ID_TRUE:
+        return Boolean.TRUE;
+      case JsonTokenId.ID_FALSE:
+        return Boolean.FALSE;
+      case JsonTokenId.ID_NULL:
+        return null;
+      default:
+        throw DecodeException.create("Unexpected token", parser.getCurrentLocation());
     }
   }
 
-  private static Map<String, Object> decodeObject(JsonParser parser) throws DecodeException {
-    Map<String, Object> object = new LinkedHashMap<>();
-    try {
-      while (true) {
-        JsonToken token = parser.nextToken();
-        if (token != JsonToken.FIELD_NAME) {
-          break;
-        }
-        String name = parser.getText();
-        parser.nextToken();
-        Object value = decodeJsonInternal(parser);
-        object.put(name, value);
-      }
-    } catch (IOException e) {
-      throw new DecodeException(e);
+  private static Map<String, Object> decodeObject(JsonParser parser) throws IOException {
+    String key1 = parser.nextFieldName();
+    if (key1 == null) {
+      return new LinkedHashMap<>(2);
     }
+    parser.nextToken();
+    Object value1 = decodeJsonInternal(parser);
+    String key2 = parser.nextFieldName();
+    if (key2 == null) {
+      LinkedHashMap<String, Object> object = new LinkedHashMap<>(2);
+      object.put(key1, value1);
+      return object;
+    }
+    parser.nextToken();
+    Object value2 = decodeJsonInternal(parser);
+    String key = parser.nextFieldName();
+    if (key == null) {
+      LinkedHashMap<String, Object> object = new LinkedHashMap<>(4);
+      object.put(key1, value1);
+      object.put(key2, value2);
+      return object;
+    }
+    LinkedHashMap<String, Object> object = new LinkedHashMap<>();
+    object.put(key1, value1);
+    object.put(key2, value2);
+    do {
+      parser.nextToken();
+      Object value = decodeJsonInternal(parser);
+      object.put(key, value);
+      key = parser.nextFieldName();
+    } while (key != null);
     return object;
   }
 
-  private static List<Object> decodeArray(JsonParser parser) throws DecodeException {
+  private static List<Object> decodeArray(JsonParser parser) throws IOException {
     List<Object> array = new ArrayList<>();
-    try {
-      while (true) {
-        parser.nextToken();
-        int tokenId = parser.getCurrentTokenId();
-        if (tokenId == JsonTokenId.ID_FIELD_NAME) {
-          throw new UnsupportedOperationException();
-        } else if (tokenId == JsonTokenId.ID_END_ARRAY) {
-          return array;
-        }
-        Object value = decodeJsonInternal(parser);
-        array.add(value);
+    while (true) {
+      parser.nextToken();
+      int tokenId = parser.getCurrentTokenId();
+      if (tokenId == JsonTokenId.ID_FIELD_NAME) {
+        throw new UnsupportedOperationException();
+      } else if (tokenId == JsonTokenId.ID_END_ARRAY) {
+        return array;
       }
-    } catch (IOException e) {
-      throw new DecodeException(e);
+      Object value = decodeJsonInternal(parser);
+      array.add(value);
     }
   }
 
