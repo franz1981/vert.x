@@ -1300,15 +1300,19 @@ public class JsonObjectTest {
 
   @Test
   public void testDecodeMap() throws Exception {
-    byte[] bytes = TestUtils.randomByteArray(10);
-    String strBytes = Base64.getEncoder().encodeToString(bytes);
-    Instant now = Instant.now();
-    String strInstant = ISO_INSTANT.format(now);
-    String json = "{\"mystr\":\"foo\",\"myint\":123,\"mylong\":1234,\"myfloat\":1.23,\"mydouble\":2.34,\"" +
-      "myboolean\":true,\"mybinary\":\"" + strBytes + "\",\"myinstant\":\"" + strInstant + "\",\"mynull\":null,\"myobj\":{\"foo\":\"bar\"},\"myarr\":[\"foo\",123]}";
+    String json = "{\n" +
+      "  \"foo1\": {\n" +
+      "    \"bar1\": {\n" +
+      "      \"juu1\": {\n" +
+      "        \"daa1\": {\n" +
+      "        }\n" +
+      "      }\n" +
+      "    }\n" +
+      "  }\n" +
+      "}\n";
     ObjectMapper jacksonMapper = new ObjectMapper();
     Map decoded = jacksonMapper.readValue(json, Map.class);
-
+    JsonObject obj = new JsonObject(json);
   }
 
   @Test
