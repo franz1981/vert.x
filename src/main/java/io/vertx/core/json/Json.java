@@ -298,13 +298,9 @@ public class Json {
       // Check if root object is a primitive or not
       switch (parser.getCurrentTokenId()) {
         case JsonTokenId.ID_START_OBJECT:
-          Map<String, Object> object = new LinkedHashMap<>();
-          decodeObject(parser, object);
-          return object;
+          return decodeObject(parser);
         case JsonTokenId.ID_START_ARRAY:
-          List<Object> array = new ArrayList<>();
-          decodeArray(parser, array);
-          return array;
+          return decodeArray(parser);
         case JsonTokenId.ID_STRING:
           return parser.getText();
         case JsonTokenId.ID_NUMBER_FLOAT:
@@ -324,7 +320,8 @@ public class Json {
     }
   }
 
-  private static void decodeObject(JsonParser parser, Map<String, Object> current) throws DecodeException {
+  private static Map<String, Object> decodeObject(JsonParser parser) throws DecodeException {
+    Map<String, Object> object = new LinkedHashMap<>();
     try {
       while (true) {
         JsonToken token = parser.nextToken();
@@ -334,14 +331,16 @@ public class Json {
         String name = parser.getText();
         parser.nextToken();
         Object value = decodeJsonInternal(parser);
-        current.put(name, value);
+        object.put(name, value);
       }
     } catch (IOException e) {
       throw new DecodeException(e);
     }
+    return object;
   }
 
-  private static void decodeArray(JsonParser parser, List<Object> current) throws DecodeException {
+  private static List<Object> decodeArray(JsonParser parser) throws DecodeException {
+    List<Object> array = new ArrayList<>();
     try {
       while (true) {
         parser.nextToken();
@@ -349,10 +348,10 @@ public class Json {
         if (tokenId == JsonTokenId.ID_FIELD_NAME) {
           throw new UnsupportedOperationException();
         } else if (tokenId == JsonTokenId.ID_END_ARRAY) {
-          return;
+          return array;
         }
         Object value = decodeJsonInternal(parser);
-        current.add(value);
+        array.add(value);
       }
     } catch (IOException e) {
       throw new DecodeException(e);
