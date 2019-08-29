@@ -132,7 +132,7 @@ public class JsonDecodeBenchmark extends BenchmarkBase {
   }
 
   @Benchmark
-  public void directSmallJackson(Blackhole blackhole) {
+  public void directSmallJackson(Blackhole blackhole) throws Exception {
     directJackson(small, blackhole);
   }
 
@@ -142,7 +142,7 @@ public class JsonDecodeBenchmark extends BenchmarkBase {
   }
 
   @Benchmark
-  public void directWideJackson(Blackhole blackhole) {
+  public void directWideJackson(Blackhole blackhole) throws Exception {
     directJackson(wide, blackhole);
   }
 
@@ -152,7 +152,7 @@ public class JsonDecodeBenchmark extends BenchmarkBase {
   }
 
   @Benchmark
-  public void directDeepJackson(Blackhole blackhole) {
+  public void directDeepJackson(Blackhole blackhole) throws Exception {
     directJackson(deep, blackhole);
   }
 
@@ -160,7 +160,8 @@ public class JsonDecodeBenchmark extends BenchmarkBase {
     blackhole.consume(new JsonObject(buffer));
   }
 
-  private void directJackson(Buffer buffer, Blackhole blackhole) {
-    blackhole.consume(new JsonObject(buffer));
+  private void directJackson(Buffer buffer, Blackhole blackhole) throws Exception {
+    Map decoded = jacksonMapper.readValue(buffer.getBytes(), Map.class);
+    blackhole.consume(new JsonObject(decoded));
   }
 }
