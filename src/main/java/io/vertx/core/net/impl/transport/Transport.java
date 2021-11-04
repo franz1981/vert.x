@@ -55,6 +55,16 @@ public class Transport {
   public static Transport nativeTransport() {
     Transport transport = null;
     try {
+      Transport ioUring = new IOUringTransport();
+      if (ioUring.isAvailable()) {
+        return ioUring;
+      } else {
+        transport = ioUring;
+      }
+    } catch (Throwable ignore) {
+      // Jar not here
+    }
+    try {
       Transport epoll = new EpollTransport();
       if (epoll.isAvailable()) {
         return epoll;
