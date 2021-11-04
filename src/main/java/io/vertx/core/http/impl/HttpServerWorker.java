@@ -284,7 +284,7 @@ public class HttpServerWorker implements Handler<Channel> {
     if (options.isCompressionSupported()) {
       pipeline.addLast("deflater", new HttpChunkContentCompressor(compressionOptions));
     }
-    if (sslHelper.isSSL() || options.isCompressionSupported()) {
+    if (sslHelper.isSSL() || options.isCompressionSupported() || !vertx.transport().supportFileRegion()) {
       // only add ChunkedWriteHandler when SSL is enabled otherwise it is not needed as FileRegion is used.
       pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());       // For large file / sendfile support
     }
