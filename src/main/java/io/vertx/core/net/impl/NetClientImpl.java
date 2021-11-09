@@ -94,7 +94,7 @@ public class NetClientImpl implements MetricsProvider, NetClient, Closeable {
     if (logEnabled) {
       pipeline.addLast("logging", new LoggingHandler());
     }
-    if (options.isSsl()) {
+    if (options.isSsl() || !ConnectionBase.checkSendFileSupport(pipeline.channel().eventLoop())) {
       // only add ChunkedWriteHandler when SSL is enabled otherwise it is not needed as FileRegion is used.
       pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());       // For large file / sendfile support
     }
