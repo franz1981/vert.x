@@ -29,6 +29,7 @@ import io.vertx.core.http.impl.cgbystrom.FlashPolicyHandler;
 import io.vertx.core.impl.ContextInternal;
 import io.vertx.core.impl.EventLoopContext;
 import io.vertx.core.impl.VertxInternal;
+import io.vertx.core.net.impl.ConnectionBase;
 import io.vertx.core.net.impl.SSLHelper;
 import io.vertx.core.net.impl.SslHandshakeCompletionHandler;
 import io.vertx.core.net.impl.VertxHandler;
@@ -263,7 +264,8 @@ public class HttpServerWorker implements Handler<Channel> {
     if (options.isCompressionSupported()) {
       pipeline.addLast("deflater", new HttpChunkContentCompressor(options.getCompressionLevel()));
     }
-    if (sslHelper.isSSL() || options.isCompressionSupported()) {
+    if (sslHelper.isSSL() || options.isCompressionSupported() ||
+      !ConnectionBase.checkSendFileSupport(pipeline.channel().eventLoop())) {
       // only add ChunkedWriteHandler when SSL is enabled otherwise it is not needed as FileRegion is used.
       pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());       // For large file / sendfile support
     }

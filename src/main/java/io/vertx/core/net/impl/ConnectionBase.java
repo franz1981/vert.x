@@ -15,7 +15,10 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedFile;
+import io.netty.handler.stream.ChunkedNioFile;
 import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.incubator.channel.uring.IOUring;
+import io.netty.incubator.channel.uring.IOUringEventLoop;
 import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.EventExecutor;
@@ -87,10 +90,12 @@ public abstract class ConnectionBase {
   private boolean read;
   private boolean needsFlush;
   private boolean closed;
+  private final boolean supportFileRegion;
 
   protected ConnectionBase(ContextInternal context, ChannelHandlerContext chctx) {
     this.vertx = context.owner();
     this.chctx = chctx;
+    this.supportFileRegion = checkSendFileSupport(chctx.channel().eventLoop());
     this.context = context;
     this.voidPromise = new VoidChannelPromise(chctx.channel(), false);
     this.closePromise = chctx.newPromise();
@@ -101,6 +106,13 @@ public abstract class ConnectionBase {
 
     // Add close handler callback
     closeFuture.onComplete(this::checkCloseHandler);
+  }
+
+  public static boolean checkSendFileSupport(final EventLoop eventLoop) {
+    if (!IOUring.isAvailable()) {
+      return false;
+    }
+    return !(eventLoop instanceof IOUringEventLoop);
   }
 
   /**
@@ -410,7 +422,7 @@ public abstract class ConnectionBase {
   protected abstract void handleInterestedOpsChanged();
 
   protected boolean supportsFileRegion() {
-    return !isSsl();
+    return supportFileRegion && !isSsl();
   }
 
   protected void reportBytesRead(Object msg) {
@@ -506,7 +518,7 @@ public abstract class ConnectionBase {
     ChannelPromise writeFuture = chctx.newPromise();
     if (!supportsFileRegion()) {
       // Cannot use zero-copy
-      writeToChannel(new ChunkedFile(raf, offset, length, 8192), writeFuture);
+      writeToChannel(new ChunkedNioFile(raf.getChannel(), offset, length, 8192), writeFuture);
     } else {
       // No encryption - use zero-copy.
       sendFileRegion(raf, offset, length, writeFuture);
