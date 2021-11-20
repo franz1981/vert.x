@@ -15,11 +15,11 @@ jobs:
     name: Run tests
     strategy:
       matrix:
-        os: [ubuntu-18.04]
+        os: [ubuntu-latest]
         profile: [""]
         jdk: [8]
         include:
-          - os: ubuntu-18.04
+          - os: ubuntu-latest
             jdk: 8
             profile: '-PtestIoUringTransport'
     runs-on: ${{ matrix.os }}
