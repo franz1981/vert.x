@@ -2,11 +2,11 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - io_uring
       - '[0-9]+.[0-9]+'
   pull_request:
     branches:
-      - master
+      - io_uring
       - '[0-9]+.[0-9]+'
   schedule:
     - cron:  '0 4 * * *'
@@ -15,22 +15,15 @@ jobs:
     name: Run tests
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
         profile: [""]
         jdk: [8]
         include:
           - os: ubuntu-latest
-            jdk: 17
-          - os: ubuntu-latest
-            jdk: 8
-            profile: '-PtestNativeTransport'
-          - os: ubuntu-latest
             jdk: 8
             profile: '-PtestIoUringTransport'
-          - os: ubuntu-latest
-            jdk: 8
-            profile: '-PtestDomainSockets'
     runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -40,7 +33,7 @@ jobs:
           java-version: ${{ matrix.jdk }}
           distribution: temurin
       - name: Run tests
-        run: mvn -s .github/maven-ci-settings.xml -q clean verify -B ${{ matrix.profile }}
+        run: sudo bash -c "ulimit -l unlimited && ulimit -n unlimited && ulimit -a && mvn -s .github/maven-ci-settings.xml -q clean verify -B ${{ matrix.profile }}"
   Deploy:
     name: Deploy to OSSRH
     if: ${{ github.repository_owner == 'eclipse-vertx' && (github.event_name == 'push' || github.event_name == 'schedule') }}

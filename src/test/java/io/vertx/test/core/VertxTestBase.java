@@ -64,6 +64,7 @@ public class VertxTestBase extends AsyncTestBase {
     boolean nativeTransport = options.getPreferNativeTransport();
     vertx = vertx(options);
     if (nativeTransport) {
+      assertNull(vertx.unavailableNativeTransportCause());
       assertTrue(vertx.isNativeTransportEnabled());
     }
   }

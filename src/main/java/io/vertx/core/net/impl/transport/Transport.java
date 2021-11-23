@@ -69,13 +69,18 @@ public class Transport {
       // Jar not here
     }
     try {
+      System.err.println("try loading IO_URING...");
       Transport ioUring = new IOUringTransport();
       if (ioUring.isAvailable()) {
+        System.err.println("IO_URING available");
         return ioUring;
       } else {
+        System.err.println("IO_URING NOT available due to: " + ioUring.unavailabilityCause());
         transport = ioUring;
       }
     } catch (Throwable ignore) {
+      System.err.println("JAR IO_URING NOT HERE...");
+      ignore.printStackTrace(System.err);
       // Jar not here
     }
     try {
