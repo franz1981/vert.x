@@ -20,9 +20,7 @@ import io.vertx.core.impl.EventLoopContext;
 
 import java.util.AbstractList;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -803,46 +801,67 @@ public class SimpleConnectionPool<C> implements ConnectionPool<C> {
     execute(new Close<>(handler));
   }
 
-  private static class Waiters<C> implements Iterable<PoolWaiter<C>> {
+  private static class Waiters<C> {
 
-    private final PoolWaiter<C> head;
+    private PoolWaiter<C> first;
+    private PoolWaiter<C> last;
+
     private int size;
 
     public Waiters() {
-      head = new PoolWaiter<>(null, null, 0, null);
-      head.next = head.prev = head;
     }
 
     PoolWaiter<C> poll() {
-      if (head.next == head) {
+      final PoolWaiter<C> f = first;
+      if (f == null) {
         return null;
       }
-      PoolWaiter<C> node = head.next;
-      remove(node);
-      return node;
+      assert f.queued;
+      assert f.prev == null;
+      final PoolWaiter<C> next = f.next;
+      f.next = null; // help GC
+      f.queued = false;
+      first = next;
+      if (next == null) {
+        last = null;
+      } else {
+        next.prev = null;
+      }
+      size--;
+      return f;
     }
 
-    void addLast(PoolWaiter<C> node) {
-      if (node.queued) {
+    void addLast(PoolWaiter<C> newNode) {
+      assert newNode.next == null && newNode.prev == null;
+      if (newNode.queued) {
         throw new IllegalStateException();
       }
-      node.queued = true;
-      node.prev = head.prev;
-      node.next = head;
-      head.prev.next = node;
-      head.prev = node;
+      final PoolWaiter<C> l = last;
+      newNode.prev = l;
+      newNode.queued = true;
+      last = newNode;
+      if (l == null) {
+        first = newNode;
+      } else {
+        l.next = newNode;
+      }
       size++;
     }
 
-    void addFirst(PoolWaiter<C> node) {
-      if (node.queued) {
+    void addFirst(PoolWaiter<C> newNode) {
+      assert newNode.next == null && newNode.prev == null;
+      if (newNode.queued) {
         throw new IllegalStateException();
       }
-      node.queued = true;
-      node.prev = head;
-      node.next = head.prev;
-      head.next.prev = node;
-      head.next = node;
+      final PoolWaiter<C> f = first;
+      newNode.next = f;
+      newNode.queued = true;
+      first = newNode;
+      if (f == null) {
+        last = newNode;
+      } else {
+        f.prev = newNode;
+      }
       size++;
     }
 
@@ -850,9 +869,24 @@ public class SimpleConnectionPool<C> implements ConnectionPool<C> {
       if (!node.queued) {
         return false;
       }
-      node.next.prev = node.prev;
-      node.prev.next = node.next;
-      node.next = node.prev = null;
+      final PoolWaiter<C> next = node.next;
+      final PoolWaiter<C> prev = node.prev;
+
+      if (prev == null) {
+        first = next;
+      } else {
+        prev.next = next;
+        // help GC
+        node.prev = null;
+      }
+
+      if (next == null) {
+        last = prev;
+      } else {
+        next.prev = prev;
+        // help GC
+        node.next = null;
+      }
       node.queued = false;
       size--;
       return true;
@@ -860,9 +894,12 @@ public class SimpleConnectionPool<C> implements ConnectionPool<C> {
 
     List<PoolWaiter<C>> clear() {
       List<PoolWaiter<C>> lst = new ArrayList<>(size);
-      this.forEach(lst::add);
-      size = 0;
-      head.next = head.prev = head;
+      PoolWaiter<C> waiter;
+      // polling implies removing -> save from GC nepotism
+      while ((waiter = poll()) != null) {
+        lst.add(waiter);
+      }
+      assert size == 0;
       return lst;
     }
 
@@ -870,27 +907,6 @@ public class SimpleConnectionPool<C> implements ConnectionPool<C> {
       return size;
     }
 
-    @Override
-    public Iterator<PoolWaiter<C>> iterator() {
-      return new Iterator<PoolWaiter<C>>() {
-        PoolWaiter<C> current = head;
-        @Override
-        public boolean hasNext() {
-          return current.next != head;
-        }
-        @Override
-        public PoolWaiter<C> next() {
-          if (current.next == head) {
-            throw new NoSuchElementException();
-          }
-          try {
-            return current.next;
-          } finally {
-            current = current.next;
-          }
-        }
-      };
-    }
   }
 
   class ListImpl extends AbstractList<PoolConnection<C>> {
@@ -898,6 +914,7 @@ public class SimpleConnectionPool<C> implements ConnectionPool<C> {
     public PoolConnection<C> get(int index) {
       return slots[index];
     }
+
     @Override
     public int size() {
       return size;
