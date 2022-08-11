@@ -19,12 +19,26 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.vertx.core.http.impl.headers.HeadersMultiMap;
 
+import java.util.List;
+
 /**
  * {@link io.netty.handler.codec.http.HttpResponseEncoder} which forces the usage of direct buffers for max performance.
  *
  * @author <a href="mailto:nmaurer@redhat.com">Norman Maurer</a>
  */
 final class VertxHttpResponseEncoder extends HttpResponseEncoder {
+
+  public VertxHttpResponseEncoder() {
+    super(AssembledFullHttpResponse.class);
+  }
+
+  @Override
+  public boolean acceptOutboundMessage(Object msg) throws Exception {
+    return msg instanceof AssembledFullHttpResponse ||
+      msg instanceof AssembledHttpResponse ||
+      msg instanceof AssembledLastHttpContent ||
+      super.acceptOutboundMessage(msg);
+  }
 
   @Override
   protected void encodeHeaders(HttpHeaders headers, ByteBuf buf) {
