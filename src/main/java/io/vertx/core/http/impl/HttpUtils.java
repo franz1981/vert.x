@@ -44,6 +44,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -822,44 +823,100 @@ public final class HttpUtils {
     return state;
   }
 
+  private static final boolean[] VALID_H_NAME_ASCII_CHARS;
+
+  static {
+    VALID_H_NAME_ASCII_CHARS = new boolean[Byte.MAX_VALUE + 1];
+    Arrays.fill(VALID_H_NAME_ASCII_CHARS, true);
+    VALID_H_NAME_ASCII_CHARS[' '] = false;
+    VALID_H_NAME_ASCII_CHARS['"'] = false;
+    VALID_H_NAME_ASCII_CHARS['('] = false;
+    VALID_H_NAME_ASCII_CHARS[')'] = false;
+    VALID_H_NAME_ASCII_CHARS[','] = false;
+    VALID_H_NAME_ASCII_CHARS['/'] = false;
+    VALID_H_NAME_ASCII_CHARS[':'] = false;
+    VALID_H_NAME_ASCII_CHARS[';'] = false;
+    VALID_H_NAME_ASCII_CHARS['<'] = false;
+    VALID_H_NAME_ASCII_CHARS['>'] = false;
+    VALID_H_NAME_ASCII_CHARS['='] = false;
+    VALID_H_NAME_ASCII_CHARS['?'] = false;
+    VALID_H_NAME_ASCII_CHARS['@'] = false;
+    VALID_H_NAME_ASCII_CHARS['['] = false;
+    VALID_H_NAME_ASCII_CHARS[']'] = false;
+    VALID_H_NAME_ASCII_CHARS['\\'] = false;
+    VALID_H_NAME_ASCII_CHARS['{'] = false;
+    VALID_H_NAME_ASCII_CHARS['}'] = false;
+    VALID_H_NAME_ASCII_CHARS[0x7f] = false;
+  }
+
+  // The RFC allows only : "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+  //                       "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+  // Where DIGIT is 0x30-0x39, and ALPHA : 0x41-0x5A and 0x61-0x7A
+  private static final long VALID_H_NAME_MASK_1 =
+    (long) ';' |
+      (long) ':' << 8 |
+      (long) '/' << 16 |
+      (long) ',' << 24 |
+      (long) ')' << 32 |
+      (long) '(' << 40 |
+      (long) '"' << 48 |
+      (long) ' ' << 56;
+
+  private static final long VALID_H_NAME_MASK_2 = (long) '\\' |
+    (long) ']' << 8 |
+    (long) '[' << 16 |
+    (long) '@' << 24 |
+    (long) '?' << 32 |
+    (long) '=' << 40 |
+    (long) '>' << 48 |
+    (long) '<' << 56;
+  // This is repeating the last pattern in order to fit the whole 8 bytes
+  private static final long VALID_H_NAME_MASK_3 =
+    (long) '}' |
+      (long) '{' << 8 |
+      (long) 0x7F << 16 |
+      (long) '}' << 24 |
+      (long) '{' << 32 |
+      (long) 0x7F << 40 |
+      (long) '}' << 48 |
+      (long) '{' << 56;
+
+  /**
+   * Hacker's Delight: Chapter 6. Searching Words. 6–1 Find First 0-Byte
+   */
+  private static boolean anyZeroByte(long word) {
+    long tmp = (word & 0x7F7F7F7F7F7F7F7FL) + 0x7F7F7F7F7F7F7F7FL;
+    tmp = ~(tmp | word | 0x7F7F7F7F7F7F7F7FL);
+    return tmp != 0;
+  }
+
   public static void validateHeaderName(CharSequence value) {
-    for (int i = 0;i < value.length();i++) {
+    for (int i = 0; i < value.length(); i++) {
       char c = value.charAt(i);
-      switch (c) {
-        // The RFC allows only : "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
-        //                       "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
-        // Where DIGIT is 0x30-0x39, and ALPHA : 0x41-0x5A and 0x61-0x7A
-        case ' ':
-        case '"':
-        case '(':
-        case ')':
-        case ',':
-        case '/':
-        case ':':
-        case ';':
-        case '<':
-        case '>':
-        case '=':
-        case '?':
-        case '@':
-        case '[':
-        case ']':
-        case '\\':
-        case '{':
-        case '}':
-        case 0x7f: // DEL
-          throw new IllegalArgumentException(
-            "a header name cannot contain some prohibited characters, such as : " + value);
-        default:
-          // Check to see if the character is a control character
-          if (c < 0x20) {
-            throw new IllegalArgumentException("a header name cannot contain control characters: " + value);
-          }
-          // Check to see if the character is not an ASCII character, or invalid
-          if (c > 0x7f) {
-            throw new IllegalArgumentException("a header name cannot contain non-ASCII character: " + value);
-          }
+      byte b = (byte) c;
+      if (c < 0x20) {
+        throw new IllegalArgumentException("a header name cannot contain control characters: " + value);
       }
+      // Check to see if the character is not an ASCII character, or invalid
+      if (c > 0x7f) {
+        throw new IllegalArgumentException("a header name cannot contain non-ASCII character: " + value);
+      }
+      if (!VALID_H_NAME_ASCII_CHARS[b]) {
+        throw new IllegalArgumentException("a header name cannot contain some prohibited characters, such as : " + value);
+      }
+      /*
+      final long mask = b * 0x101010101010101L;
+      // a ^ b = 0 iff a == b
+      // one or more 0 bytes could be found if some b is present in VALID_H_NAME_MASK
+      if (anyZeroByte(mask ^ VALID_H_NAME_MASK_1)) {
+        throw new IllegalArgumentException("a header name cannot contain some prohibited characters, such as : " + value);
+      }
+      if (anyZeroByte(mask ^ VALID_H_NAME_MASK_2)) {
+        throw new IllegalArgumentException("a header name cannot contain some prohibited characters, such as : " + value);
+      }
+      if (anyZeroByte(mask ^ VALID_H_NAME_MASK_3)) {
+        throw new IllegalArgumentException("a header name cannot contain some prohibited characters, such as : " + value);
+      }*/
     }
   }
 

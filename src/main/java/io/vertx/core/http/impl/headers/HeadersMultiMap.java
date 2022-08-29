@@ -320,7 +320,7 @@ public final class HeadersMultiMap extends HttpHeaders implements MultiMap {
       }
       e = e.next;
     }
-    return values == null ? Collections.emptyList() : Collections.unmodifiableList(values);
+    return values == null ? Collections.emptyList() : values;
   }
 
   @Override
