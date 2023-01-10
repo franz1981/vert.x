@@ -240,6 +240,9 @@ public class Http1xServerConnection extends Http1xConnectionBase<ServerWebSocket
       Handler<HttpServerRequest> handler = next_.nettyRequest().decoderResult().isSuccess() ? requestHandler : invalidRequestHandler;
       handler.handle(next_);
     });
+    if (next.nettyRequest() instanceof DefaultFullHttpRequest) {
+      onEnd();
+    }
   }
 
   @Override
