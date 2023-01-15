@@ -491,7 +491,7 @@ public final class HttpUtils {
     }
     String ss = uri.substring(i, queryStart);
     if (!FIRST.get()) {
-      if (uri.contains("plaintext") && FIRST.compareAndSet(false, true)) {
+      if (FIRST.compareAndSet(false, true)) {
         System.err.println("******************* Creating " + ss + " on " + uri);
       }
     }
