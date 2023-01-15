@@ -47,6 +47,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static io.netty.handler.codec.http.HttpHeaderValues.APPLICATION_X_WWW_FORM_URLENCODED;
@@ -456,6 +457,8 @@ public final class HttpUtils {
     return new URI(scheme, authority, path, query, _ref.getFragment());
   }
 
+  private static final AtomicBoolean FIRST = new AtomicBoolean();
+
   /**
    * Extract the path out of the uri.
    */
@@ -487,7 +490,11 @@ public final class HttpUtils {
       }
     }
     String ss = uri.substring(i, queryStart);
-    System.err.println(" Creating " + ss + " on " + uri);
+    if (!FIRST.get()) {
+      if (uri.contains("plaintext") && FIRST.compareAndSet(false, true)) {
+        System.err.println("******************* Creating " + ss + " on " + uri);
+      }
+    }
     return ss;
   }
 
