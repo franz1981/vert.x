@@ -486,7 +486,9 @@ public final class HttpUtils {
         return uri;
       }
     }
-    return uri.substring(i, queryStart);
+    String ss = uri.substring(i, queryStart);
+    System.err.println(" Creating " + ss + " on " + uri);
+    return ss;
   }
 
   /**
