@@ -15,9 +15,7 @@ package io.vertx.core.http.impl;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.handler.codec.compression.ZlibWrapper;
 import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.util.AsciiString;
 import io.netty.util.CharsetUtil;
@@ -33,6 +31,7 @@ import io.vertx.core.http.HttpClosedException;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.http.StreamPriority;
+import io.vertx.core.impl.ConcurrentHashSet;
 import io.vertx.core.impl.VertxInternal;
 import io.vertx.core.spi.tracing.TagExtractor;
 
@@ -47,7 +46,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static io.netty.handler.codec.http.HttpHeaderValues.APPLICATION_X_WWW_FORM_URLENCODED;
@@ -457,7 +455,7 @@ public final class HttpUtils {
     return new URI(scheme, authority, path, query, _ref.getFragment());
   }
 
-  private static final AtomicBoolean FIRST = new AtomicBoolean();
+  private static final ConcurrentHashSet<String> URI_SEEN = new ConcurrentHashSet<>();
 
   /**
    * Extract the path out of the uri.
@@ -490,10 +488,8 @@ public final class HttpUtils {
       }
     }
     String ss = uri.substring(i, queryStart);
-    if (!FIRST.get()) {
-      if (FIRST.compareAndSet(false, true)) {
-        System.err.println("******************* Creating " + ss + " on " + uri);
-      }
+    if (!URI_SEEN.add(ss)) {
+      System.err.println("******************* Creating " + ss + " on " + uri);
     }
     return ss;
   }
