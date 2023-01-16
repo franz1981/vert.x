@@ -488,7 +488,7 @@ public final class HttpUtils {
       }
     }
     String ss = uri.substring(i, queryStart);
-    if (!URI_SEEN.add(ss)) {
+    if (URI_SEEN.add(ss)) {
       System.err.println("******************* Creating " + ss + " on " + uri);
     }
     return ss;
