@@ -581,7 +581,7 @@ public class Http1xServerRequest extends HttpServerRequestInternal implements io
       queue = pending;
     }
     if (queue != null) {
-      queue.write(InboundBuffer.END_SENTINEL);
+      // this is buggy! is just to see what happen!
     } else {
       onEnd();
     }
