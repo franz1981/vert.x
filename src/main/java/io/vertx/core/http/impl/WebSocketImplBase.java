@@ -44,6 +44,7 @@ import io.vertx.core.streams.impl.InboundBuffer;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.security.cert.X509Certificate;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.util.List;
 import java.util.UUID;
@@ -308,7 +309,19 @@ public abstract class WebSocketImplBase<S extends WebSocketBase> implements WebS
 
   @Override
   public Future<Void> writeTextMessage(String text) {
-    return writePartialMessage(WebSocketFrameType.TEXT, Buffer.buffer(text), 0);
+    byte[] utf8Bytes = text.getBytes(StandardCharsets.UTF_8);
+    boolean isFinal = utf8Bytes.length <= maxWebSocketFrameSize;
+    if (isFinal) {
+      // ALTERNATIVE A: we create a copy wasting the previous one, but we don't introduce a new buffer type
+      // ByteBuf copiedBuffer = VertxByteBufAllocator.DEFAULT.heapBuffer(utf8Bytes.length);
+      // copiedBuffer.writeBytes(utf8Bytes);
+      // don't make the frame to be wrapped in an unreleasable buffer, again
+      // return writeFrame(new WebSocketFrameImpl(WebSocketFrameType.TEXT, copiedBuffer, true, false));
+      // ALTERNATIVE B: we reuse the byte[] wrapping it into a new buffer,
+      // but we introduce a new buffer type which requires to be released i.e. reference counting isn't free!
+      return writeFrame(new WebSocketFrameImpl(WebSocketFrameType.TEXT, utf8Bytes, true));
+    }
+    return writePartialMessage(WebSocketFrameType.TEXT, Buffer.buffer(utf8Bytes), 0);
   }
 
   @Override
